@@ -111,7 +111,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
         self.num_labels = 2 # hkws changed from 10
         self.bert = model
         self.classify = SequenceToSequenceClassificationHead(
-            model.args.embed_dim, self.num_labels)
+            model.embed_dim, self.num_labels)
 
     @torch.cuda.amp.autocast()
     def forward(self, input_ids, targets=None, finetune=True, finetune_emb=True):
