@@ -5,7 +5,7 @@
 
 import itertools
 import os
-from typing import Sequence, Tuple, List, Union
+from typing import Sequence, Tuple, List, Union, Any
 import pickle
 import re
 import shutil
@@ -377,77 +377,121 @@ def read_alignment_lines(
     assert isinstance(seq, str) and isinstance(desc, str)
     yield desc, parse(seq)
 
-class DynamicsDataset(torch.utils.data.Dataset):
-   """
-    Loads NMR dynamics train and test split for supervised MLM-like training.
-   """
-   ## TODO: update where it is getting the files to read in
+from collections import OrderedDict
+SSP_VOCAB = OrderedDict([
+    ('-',  -1),
+    ('H', 0),
+    ('G',  1),
+    ('I',  2),
+    ('E',  3),
+    ('B',  4),
+    ('T',  5),
+    ('S',  6),
+    ('X',  7)])
 
-    def __getitem__(self, idx):
-        """
-        Returns a dict with the following entires
-         - seq : Str (domain sequence)
-         - ssp : Str (SSP labels)
-        # - dist : np.array (distance map)
-        # - coords : np.array (3D coordinates)
-        """
-        name = self.names[idx]
-        pkl_fname = os.path.join(self.pkl_dir, name[1:3], f"{name}.pkl")
-        with open(pkl_fname, "rb") as f:
-            obj = pickle.load(f)
-        #return obj   
+class SSP_Tokenizer():
 
-        # added in new work
+    def __init__(self, vocab: str = 'ssp'):
+        if vocab == 'ssp':
+            self.vocab = SSP_VOCAB
+        self.tokens = list(self.vocab.keys())
+        self._vocab_type = vocab
 
-         a3m_name = os.path.join('/home/my/ssp/structural-data/msas',name+'.a3m')
-        #obj.append(name)
-        msa=read_msa(a3m_name,1) # in MSA transformer code, this is (a3m_name, 24)
-        msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter(msa)
-        input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
-        ssp = self.ssp_tokenizer.convert_tokens_to_ids(obj['ssp'])[:256]
-        labels = np.asarray(ssp, np.int64)+1
-        #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
-        return msa_batch_token,input_mask,labels
+    @property
+    def vocab_size(self) -> int:
+        return len(self.vocab)
+
+    def convert_token_to_id(self, token: str) -> int:
+        """ Converts a token (str/unicode) in an id using the vocab. """
+        try:
+            return self.vocab[token]
+        except KeyError:
+            raise KeyError(f"Unrecognized token: '{token}'")
+
+    def convert_tokens_to_ids(self, tokens: List[str]) -> List[int]:
+        return [self.convert_token_to_id(token) for token in tokens]
+
+    def convert_id_to_token(self, index: int) -> str:
+        """Converts an index (integer) in a token (string/unicode) using the vocab."""
+        try:
+            return self.tokens[index]
+        except IndexError:
+            raise IndexError(f"Unrecognized index: '{index}'")
+
+    def convert_ids_to_tokens(self, indices: List[int]) -> List[str]:
+        return [self.convert_id_to_token(id_) for id_ in indices]
+
+# class DynamicsDataset(torch.utils.data.Dataset):
+#    """
+#     Loads NMR dynamics train and test split for supervised MLM-like training.
+#    """
+#    ## TODO: update where it is getting the files to read in
+
+#     def __getitem__(self, idx):
+#         """
+#         Returns a dict with the following entires
+#          - seq : Str (domain sequence)
+#          - ssp : Str (SSP labels)
+#         # - dist : np.array (distance map)
+#         # - coords : np.array (3D coordinates)
+#         """
+#         name = self.names[idx]
+#         pkl_fname = os.path.join(self.pkl_dir, name[1:3], f"{name}.pkl")
+#         with open(pkl_fname, "rb") as f:
+#             obj = pickle.load(f)
+#         #return obj   
+
+#         # added in new work
+
+#          a3m_name = os.path.join('/home/my/ssp/structural-data/msas',name+'.a3m')
+#         #obj.append(name)
+#         msa=read_msa(a3m_name,1) # in MSA transformer code, this is (a3m_name, 24)
+#         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter(msa)
+#         input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
+#         ssp = self.ssp_tokenizer.convert_tokens_to_ids(obj['ssp'])[:256]
+#         labels = np.asarray(ssp, np.int64)+1
+#         #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
+#         return msa_batch_token,input_mask,labels
 ####### dumped in here from new work. #########
 
 # Do I need this to be the msa transformer architecture?
 
 msa_alphabet = Alphabet.from_architecture('msa_transformer')
 msa_batch_converter = msa_alphabet.get_batch_converter()
-from Bio import SeqIO
-import string
-from typing import List, Tuple,Any
-deletekeys = dict.fromkeys(string.ascii_lowercase)
-deletekeys["."] = None
-deletekeys["*"] = None
-translation = str.maketrans(deletekeys)
-def read_sequence(filename: str) -> Tuple[str, str]:
-    """ Reads the first (reference) sequences from a fasta or MSA file."""
-    record = next(SeqIO.parse(filename, "fasta"))
-    return record.description, str(record.seq)
+# from Bio import SeqIO
+# import string
+# from typing import List, Tuple,Any
+# deletekeys = dict.fromkeys(string.ascii_lowercase)
+# deletekeys["."] = None
+# deletekeys["*"] = None
+# translation = str.maketrans(deletekeys)
+# def read_sequence(filename: str) -> Tuple[str, str]:
+#     """ Reads the first (reference) sequences from a fasta or MSA file."""
+#     record = next(SeqIO.parse(filename, "fasta"))
+#     return record.description, str(record.seq)
 
-def remove_insertions(sequence: str) -> str:
-    """ Removes any insertions into the sequence. Needed to load aligned sequences in an MSA. """
-    return sequence.translate(translation)
+# def remove_insertions(sequence: str) -> str:
+#     """ Removes any insertions into the sequence. Needed to load aligned sequences in an MSA. """
+#     return sequence.translate(translation)
 
+# # def read_msa(filename: str, nseq: int) -> List[Tuple[str, str]]:
+# #     """ Reads the first nseq sequences from an MSA file, automatically removes insertions."""
+# #     return [(record.description, remove_insertions(str(record.seq)))
+# #             for record in itertools.islice(SeqIO.parse(filename, "fasta"), nseq)]
+
+# import random
 # def read_msa(filename: str, nseq: int) -> List[Tuple[str, str]]:
 #     """ Reads the first nseq sequences from an MSA file, automatically removes insertions."""
-#     return [(record.description, remove_insertions(str(record.seq)))
-#             for record in itertools.islice(SeqIO.parse(filename, "fasta"), nseq)]
 
-import random
-def read_msa(filename: str, nseq: int) -> List[Tuple[str, str]]:
-    """ Reads the first nseq sequences from an MSA file, automatically removes insertions."""
-
-    msa = [
-        (record.description, str(record.seq))
-        for record in itertools.islice(SeqIO.parse(filename, "fasta"),None)
-    ]
-    msa0=[msa[0]]
-    random.shuffle(msa)
-    msa0.extend(msa[:nseq-1])
-    msa = [(desc, seq.upper()[:len(msa0[0][1])]) for desc, seq in msa0]
-    return msa
+#     msa = [
+#         (record.description, str(record.seq))
+#         for record in itertools.islice(SeqIO.parse(filename, "fasta"),None)
+#     ]
+#     msa0=[msa[0]]
+#     random.shuffle(msa)
+#     msa0.extend(msa[:nseq-1])
+#     msa = [(desc, seq.upper()[:len(msa0[0][1])]) for desc, seq in msa0]
+#     return msa
 
 ####### end dump ############
 class ESMStructuralSplitDataset(torch.utils.data.Dataset):
@@ -524,6 +568,8 @@ class ESMStructuralSplitDataset(torch.utils.data.Dataset):
         )
         self.pkl_dir = os.path.join(self.base_path, "pkl")
         self.names = []
+        self.ssp_dict=dict()
+        self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
         with open(self.split_file) as f:
             self.names = f.read().splitlines()
 
@@ -550,6 +596,7 @@ class ESMStructuralSplitDataset(torch.utils.data.Dataset):
             download_url(url=url, root=self.base_path, filename=tar_filename, md5=md5_hash)
             shutil.unpack_archive(download_path, self.base_path)
 
+
     def __getitem__(self, idx):
         """
         Returns a dict with the following entires
@@ -562,4 +609,68 @@ class ESMStructuralSplitDataset(torch.utils.data.Dataset):
         pkl_fname = os.path.join(self.pkl_dir, name[1:3], f"{name}.pkl")
         with open(pkl_fname, "rb") as f:
             obj = pickle.load(f)
-        return obj
+        sequence = obj['seq']
+        #a3m_name = os.path.join('/home/my/ssp/structural-data/msas',name+'.a3m')
+        #obj.append(name)
+        #msa=read_msa(a3m_name,1)
+        msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
+        input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
+        ssp = self.ssp_tokenizer.convert_tokens_to_ids(obj['ssp'])[:256]
+        labels = np.asarray(ssp, np.int64)+1
+        #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
+        return msa_batch_token,input_mask,labels
+    
+    def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
+        input_ids, input_mask, ss_label = tuple(zip(*batch))
+        input_ids = (pad_sequences(input_ids, 1))
+        input_mask = torch.from_numpy(pad_sequences(input_mask, 1))
+        ss_label = torch.from_numpy(pad_sequences_label(ss_label, -1))
+        ss_label = ss_label + 1
+        output = {'input_ids': input_ids,
+                  'input_mask': input_mask,
+                  'targets': ss_label}
+        return output
+
+import numpy as np
+def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
+    batch_size = len(sequences)
+    #shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
+    shape = [batch_size] + [256]
+    if dtype is None:
+        dtype = sequences[0].dtype
+
+    if isinstance(sequences[0], np.ndarray):
+        array = np.full(shape, constant_value, dtype=dtype)
+    elif isinstance(sequences[0], torch.Tensor):
+        array = torch.full(shape, constant_value, dtype=dtype)
+    else:
+        array = np.full(shape, constant_value, dtype=dtype)
+
+
+    for arr, seq in zip(array, sequences):
+        arrslice = tuple(slice(dim) for dim in seq.shape)
+        arr[arrslice] = seq  
+
+    return array
+
+
+def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
+    batch_size = len(sequences)
+    shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
+    #shape = [batch_size] + np.max([256],0).tolist()
+    if dtype is None:
+        dtype = sequences[0].dtype
+
+    if isinstance(sequences[0], np.ndarray):
+        array = np.full(shape, constant_value, dtype=dtype)
+    elif isinstance(sequences[0], torch.Tensor):
+        array = torch.full(shape, constant_value, dtype=dtype)
+    else:
+        array = np.full(shape, constant_value, dtype=dtype)
+
+
+    for arr, seq in zip(array, sequences):
+        arrslice = tuple(slice(dim) for dim in seq.shape)
+        arr[arrslice] = seq  
+
+    return array
