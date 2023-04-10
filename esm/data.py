@@ -263,7 +263,9 @@ class BatchConverter(object):
         # RoBERTa uses an eos token, while ESM-1 does not.
         batch_size = len(raw_batch)
         batch_labels, seq_str_list = zip(*raw_batch)
-        seq_encoded_list = [self.alphabet.encode(seq_str) for seq_str in seq_str_list]
+        #hack from revisiting PLMs codebase
+        seq_encoded_list = [self.alphabet.encode(seq_str[:256]) for seq_str in seq_str_list]
+        #seq_encoded_list = [self.alphabet.encode(seq_str) for seq_str in seq_str_list]
         if self.truncation_seq_length:
             seq_encoded_list = [seq_str[:self.truncation_seq_length] for seq_str in seq_encoded_list]
         max_len = max(len(seq_encoded) for seq_encoded in seq_encoded_list)
@@ -307,8 +309,8 @@ class MSABatchConverter(BatchConverter):
 
         batch_size = len(raw_batch)
         max_alignments = max(len(msa) for msa in raw_batch)
-        max_seqlen = max(len(msa[0][1]) for msa in raw_batch)
-
+        #max_seqlen = max(len(msa[0][1]) for msa in raw_batch)
+        max_seqlen=256 # hkws hack copied from revisiting-PLMs
         tokens = torch.empty(
             (
                 batch_size,
@@ -626,6 +628,9 @@ class ESMStructuralSplitDataset(torch.utils.data.Dataset):
         input_mask = torch.from_numpy(pad_sequences(input_mask, 1))
         ss_label = torch.from_numpy(pad_sequences_label(ss_label, -1))
         ss_label = ss_label + 1
+        print(input_ids[0].shape)
+        print(input_mask[0].shape)
+        print(ss_label[0].shape)
         output = {'input_ids': input_ids,
                   'input_mask': input_mask,
                   'targets': ss_label}
@@ -657,6 +662,7 @@ def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np
 def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
     shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
+    #print(shape)
     #shape = [batch_size] + np.max([256],0).tolist()
     if dtype is None:
         dtype = sequences[0].dtype
