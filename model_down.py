@@ -6,7 +6,7 @@ from torch.nn.utils.weight_norm import weight_norm
 # from https://github.com/elttaes/Revisiting-PLMs/blob/90ae45755f176458f8b73eee33eb993aae01d460/Structure/ssp/esm/1b/train.py
 # """ / model_down.py
 
-model, alphabet = esm.pretrained.esm2_t33_650M_UR50D() # hkws changed
+model, alphabet = esm.pretrained.esm2_t6_8M_UR50D() # hkws changed
 batch_converter = alphabet.get_batch_converter()
 
 def _init_weights(module):
