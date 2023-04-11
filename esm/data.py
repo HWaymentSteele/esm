@@ -390,11 +390,20 @@ SSP_VOCAB = OrderedDict([
     ('S',  6),
     ('X',  7)])
 
+DYN_VOCAB = OrderedDict([
+    ('-',  -1),
+    ('0', 0),
+    ('1',  1)])
+
+
 class SSP_Tokenizer():
 
     def __init__(self, vocab: str = 'ssp'):
         if vocab == 'ssp':
             self.vocab = SSP_VOCAB
+        elif vocap == 'dyn':
+            self.vocab = DYN_VOCAB
+            
         self.tokens = list(self.vocab.keys())
         self._vocab_type = vocab
 
