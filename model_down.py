@@ -108,7 +108,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.num_labels = 2 # hkws changed from 10
+        self.num_labels = 10 # change for dynamics classification
         self.bert = model
         self.classify = SequenceToSequenceClassificationHead(
             model.embed_dim, self.num_labels)
