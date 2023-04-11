@@ -159,7 +159,7 @@ class Alphabet(object):
             standard_toks = proteinseq_toks["toks"]
             prepend_toks = ("<cls>", "<pad>", "<eos>", "<unk>")
             append_toks = ("<mask>",)
-            prepend_bos = True
+            prepend_bos = False
             append_eos = False
             use_msa = True
         elif "invariant_gvp" in name.lower():
