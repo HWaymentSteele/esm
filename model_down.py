@@ -124,8 +124,8 @@ class ProteinBertForSequence2Sequence(nn.Module):
                 v.requires_grad = False
 
 
-        outputs = self.bert(input_ids, repr_layers=[33])
-        sequence_output = outputs['representations'][33]
+        outputs = self.bert(input_ids, repr_layers=[6])
+        sequence_output = outputs['representations'][6]
         outputs = self.classify(sequence_output, targets)
 
         return outputs
