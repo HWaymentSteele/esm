@@ -616,12 +616,15 @@ def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarr
 
     return array
 
-class LabeledDynamicsDataset(torch.utils.data.Dataset):
+class LabeledDynamicsDataset(torch.utils.data.Dataset, data_type='R1R2'):
     """
     For each protein, we use a pkl file that contains:
         - seq    : The domain sequence, stored as an L-length string
         - ssp    : The secondary structure labels, stored as an L-length string
         - dyn   : The dynamics labels
+       
+    data_type: 'R1R2_label' or 'Rex_MFA_label'. Currently 90 proteins with R1R2 data, 75 with MFA R_ex data.
+    
     """
     base_folder = "RelaxDB"
 
@@ -638,7 +641,8 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         ], "train_valid must be 'train' or 'valid'"
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
-        self.pkl_dir = os.path.join(self.base_path, "dyn_data_for_esm")
+        self.pkl_dir = os.path.join(self.base_path, "dyn_data_v2")
+        self.data_type = data_type
         self.names = []
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
@@ -662,23 +666,38 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         pkl_fname = os.path.join(self.pkl_dir, f"{name}.pkl")
         with open(pkl_fname, "rb") as f:
             obj = pickle.load(f)
-        sequence = obj['seq']
+        sequence = obj['sequence']
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
         input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
-        ssp = self.dyn_tokenizer.convert_tokens_to_ids(obj['dyn']) #[:256]
-        labels = np.asarray(ssp, np.int64)+1
-        #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
-        return msa_batch_token,input_mask,labels
-    
+        
+        # classifier
+        if self.data_type=='R1R2_label' or self.data_type=='Rex_MFA_label':
+            labels = self.dyn_tokenizer.convert_tokens_to_ids(obj[self.data_type]) #[:256]
+            labels = np.asarray(labels, np.int64)+1
+            #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
+
+            return msa_batch_token,input_mask,labels
+        
+        else: # regressor
+            return msa_batch_token, input_mask, obj[self.data_type]
     
     def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
-        input_ids, input_mask, ss_label = tuple(zip(*batch))
+        input_ids, input_mask, label = tuple(zip(*batch))
         input_ids = (pad_sequences(input_ids, 1))
         input_mask = torch.from_numpy(pad_sequences(input_mask, 1))
-        ss_label = torch.from_numpy(pad_sequences_label(ss_label, -1))
-        ss_label = ss_label + 1
-
-        output = {'input_ids': input_ids,
+        
+        #classifier
+        if self.data_type=='R1R2_label' or self.data_type=='Rex_MFA_label':
+            label = torch.from_numpy(pad_sequences_label(label, -1))
+            label = label + 1
+            output = {'input_ids': input_ids,
                   'input_mask': input_mask,
-                  'targets': ss_label}
+                  'targets': label}
+            
+        else: # regressor
+            data = torch.from_numpy(pad_sequences_label(label, np.NaN))
+            output = {'input_ids': input_ids,
+                  'input_mask': input_mask,
+                  'targets': data}
+
         return output
