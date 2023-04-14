@@ -665,10 +665,11 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         sequence = obj['seq']
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
         input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
-        ssp = self.ssp_tokenizer.convert_tokens_to_ids(obj['ssp'])[:256]
+        ssp = self.dyn_tokenizer.convert_tokens_to_ids(obj['dyn'])[:256]
         labels = np.asarray(ssp, np.int64)+1
         #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
         return msa_batch_token,input_mask,labels
+    
     
     def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
         input_ids, input_mask, ss_label = tuple(zip(*batch))
