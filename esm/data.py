@@ -616,7 +616,7 @@ def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarr
 
     return array
 
-class LabeledDynamicsDataset(torch.utils.data.Dataset, data_type='R1R2'):
+class LabeledDynamicsDataset(torch.utils.data.Dataset):
     """
     For each protein, we use a pkl file that contains:
         - seq    : The domain sequence, stored as an L-length string
@@ -633,6 +633,7 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset, data_type='R1R2'):
         split,
         root_path=os.path.expanduser("~/.cache/torch/data/esm"),
         download=False,
+        data_type='R1R2_label'
     ):
         super().__init__()
         assert split in [
