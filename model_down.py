@@ -6,7 +6,7 @@ from torch.nn.utils.weight_norm import weight_norm
 # from https://github.com/elttaes/Revisiting-PLMs/blob/90ae45755f176458f8b73eee33eb993aae01d460/Structure/ssp/esm/1b/train.py
 # """ / model_down.py
 
-model, alphabet = esm.pretrained.esm2_t6_8M_UR50D() # hkws changed
+model, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 batch_converter = alphabet.get_batch_converter()
 
 def _init_weights(module):
@@ -80,7 +80,7 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-weights = [0.1,0.1, 0.1, 1.0]
+weights = [0.1,0.1, 0.1, 50.0]
 class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
@@ -102,8 +102,8 @@ class SequenceToSequenceClassificationHead(nn.Module):
             classification_loss = loss_fct(
                 sequence_logits.view(-1, self.num_labels), targets.view(-1))
             acc_fct = Accuracy(ignore_index=self._ignore_index)
-            metrics = {'accuracy':
-                       acc_fct(sequence_logits.view(-1, self.num_labels), targets.view(-1))}
+            metrics = {'accuracy': acc_fct(sequence_logits.view(-1, self.num_labels), targets.view(-1))}
+
             loss_and_metrics = (classification_loss, metrics)
             outputs = (loss_and_metrics,) + outputs
         return outputs
