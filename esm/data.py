@@ -264,8 +264,8 @@ class BatchConverter(object):
         batch_size = len(raw_batch)
         batch_labels, seq_str_list = zip(*raw_batch)
         #hack from revisiting PLMs codebase
-        seq_encoded_list = [self.alphabet.encode(seq_str[:256]) for seq_str in seq_str_list]
-        #seq_encoded_list = [self.alphabet.encode(seq_str) for seq_str in seq_str_list]
+        #seq_encoded_list = [self.alphabet.encode(seq_str[:256]) for seq_str in seq_str_list]
+        seq_encoded_list = [self.alphabet.encode(seq_str) for seq_str in seq_str_list]
         if self.truncation_seq_length:
             seq_encoded_list = [seq_str[:self.truncation_seq_length] for seq_str in seq_encoded_list]
         max_len = max(len(seq_encoded) for seq_encoded in seq_encoded_list)
@@ -309,8 +309,8 @@ class MSABatchConverter(BatchConverter):
 
         batch_size = len(raw_batch)
         max_alignments = max(len(msa) for msa in raw_batch)
-        #max_seqlen = max(len(msa[0][1]) for msa in raw_batch)
-        max_seqlen=256 # hkws hack copied from revisiting-PLMs
+        max_seqlen = max(len(msa[0][1]) for msa in raw_batch)
+        #max_seqlen=256 # hkws hack copied from revisiting-PLMs
         tokens = torch.empty(
             (
                 batch_size,
@@ -575,8 +575,8 @@ class ESMStructuralSplitDataset(torch.utils.data.Dataset):
 import numpy as np
 def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
-    #shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
-    shape = [batch_size] + [256]
+    shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
+    #shape = [batch_size] + [256]
     if dtype is None:
         dtype = sequences[0].dtype
 
@@ -665,7 +665,7 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         sequence = obj['seq']
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
         input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
-        ssp = self.dyn_tokenizer.convert_tokens_to_ids(obj['dyn'])[:256]
+        ssp = self.dyn_tokenizer.convert_tokens_to_ids(obj['dyn']) #[:256]
         labels = np.asarray(ssp, np.int64)+1
         #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
         return msa_batch_token,input_mask,labels
