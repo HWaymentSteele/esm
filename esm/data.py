@@ -594,7 +594,6 @@ def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np
 
     return array
 
-
 def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
     shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
@@ -616,3 +615,64 @@ def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarr
         arr[arrslice] = seq  
 
     return array
+
+class LabeledDynamicsDataset(torch.utils.data.Dataset):
+    """
+    For each protein, we use a pkl file that contains:
+        - seq    : The domain sequence, stored as an L-length string
+        - ssp    : The secondary structure labels, stored as an L-length string
+        - dyn   : The dynamics labels
+    """
+    base_folder = "RelaxDB"
+
+    def __init__(
+        self,
+        split,
+        root_path=os.path.expanduser("~/.cache/torch/data/esm"),
+        download=False,
+    ):
+        super().__init__()
+        assert split in [
+            "train",
+            "valid",
+        ], "train_valid must be 'train' or 'valid'"
+        self.root_path = root_path
+        self.pkl_dir = os.path.join(self.base_path, "dyn_data_for_esm")
+        self.names = []
+        self.ssp_dict=dict()
+        self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
+        self.dyn_tokenizer = SSP_Tokenizer(vocab='dyn')
+
+        with open(self.split_file) as f:
+            self.names = f.read().splitlines()
+
+    def __getitem__(self, idx):
+        """
+        Returns a dict with the following entires
+         - seq : Str (domain sequence)
+         - ssp : Str (SSP labels)
+         - dyn: Str (dyn labels)
+        """
+        name = self.names[idx]
+        pkl_fname = os.path.join(self.pkl_dir, f"{name}.pkl")
+        with open(pkl_fname, "rb") as f:
+            obj = pickle.load(f)
+        sequence = obj['seq']
+        msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
+        input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
+        ssp = self.ssp_tokenizer.convert_tokens_to_ids(obj['ssp'])[:256]
+        labels = np.asarray(ssp, np.int64)+1
+        #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
+        return msa_batch_token,input_mask,labels
+    
+    def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
+        input_ids, input_mask, ss_label = tuple(zip(*batch))
+        input_ids = (pad_sequences(input_ids, 1))
+        input_mask = torch.from_numpy(pad_sequences(input_mask, 1))
+        ss_label = torch.from_numpy(pad_sequences_label(ss_label, -1))
+        ss_label = ss_label + 1
+
+        output = {'input_ids': input_ids,
+                  'input_mask': input_mask,
+                  'targets': ss_label}
+        return output
