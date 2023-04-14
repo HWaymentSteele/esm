@@ -637,6 +637,7 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
             "valid",
         ], "train_valid must be 'train' or 'valid'"
         self.root_path = root_path
+        self.base_path = os.path.join(self.root_path, self.base_folder)
         self.pkl_dir = os.path.join(self.base_path, "dyn_data_for_esm")
         self.names = []
         self.ssp_dict=dict()
