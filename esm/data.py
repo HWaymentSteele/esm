@@ -401,7 +401,7 @@ class SSP_Tokenizer():
     def __init__(self, vocab: str = 'ssp'):
         if vocab == 'ssp':
             self.vocab = SSP_VOCAB
-        elif vocap == 'dyn':
+        elif vocab == 'dyn':
             self.vocab = DYN_VOCAB
             
         self.tokens = list(self.vocab.keys())
