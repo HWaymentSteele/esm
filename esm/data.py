@@ -594,6 +594,26 @@ def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np
 
     return array
 
+def pad_data(data: np.ndarray, constant_value=0, dtype=None) -> np.ndarray:
+    batch_size = len(data)
+    shape = [batch_size] + [np.max([len(seq) for seq in data])]
+    #shape = [batch_size] + [256]
+    if dtype is None:
+        dtype = data[0].dtype
+
+    if isinstance(data[0], np.ndarray):
+        array = np.full(shape, constant_value, dtype=dtype)
+    elif isinstance(data[0], torch.Tensor):
+        array = torch.full(shape, constant_value, dtype=dtype)
+    else:
+        array = np.full(shape, constant_value, dtype=dtype)
+
+    for arr, seq in zip(array, data):
+        arrslice = tuple(slice(dim) for dim in seq.shape)
+        arr[arrslice] = seq  
+
+    return array
+
 def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
     shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
@@ -638,8 +658,9 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         super().__init__()
         assert split in [
             "train",
+            "train_MFA",
             "valid",
-        ], "train_valid must be 'train' or 'valid'"
+        ], "train_valid must be 'train', 'train_MFA', or 'valid'"
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
         self.pkl_dir = os.path.join(self.base_path, "dyn_data_v2")
@@ -667,12 +688,13 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         pkl_fname = os.path.join(self.pkl_dir, f"{name}.pkl")
         with open(pkl_fname, "rb") as f:
             obj = pickle.load(f)
+
         sequence = obj['sequence']
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
-        input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
+        input_mask = obj['data_mask']
         
         # classifier
-        if self.data_type=='R1R2_label' or self.data_type=='Rex_MFA_label':
+        if 'label' in self.data_type:
             labels = self.dyn_tokenizer.convert_tokens_to_ids(obj[self.data_type]) #[:256]
             labels = np.asarray(labels, np.int64)+1
             #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
@@ -685,10 +707,10 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
     def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
         input_ids, input_mask, label = tuple(zip(*batch))
         input_ids = (pad_sequences(input_ids, 1))
-        input_mask = torch.from_numpy(pad_sequences(input_mask, 1))
+        input_mask = torch.from_numpy(pad_sequences(input_mask, 0)) #boolean, False = no data
         
         #classifier
-        if self.data_type=='R1R2_label' or self.data_type=='Rex_MFA_label':
+        if 'label' in self.data_type:
             label = torch.from_numpy(pad_sequences_label(label, -1))
             label = label + 1
             output = {'input_ids': input_ids,
@@ -696,7 +718,7 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
                   'targets': label}
             
         else: # regressor
-            data = torch.from_numpy(pad_sequences_label(label, np.NaN))
+            data = torch.from_numpy(pad_data(label, 0)).float()
             output = {'input_ids': input_ids,
                   'input_mask': input_mask,
                   'targets': data}
