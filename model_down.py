@@ -80,7 +80,7 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-weights = [0.1,0.1, 0.1, 50.0]
+weights = [0.1,0.1, 0.1, 10.0]
 class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
@@ -133,3 +133,51 @@ class ProteinBertForSequence2Sequence(nn.Module):
 
         return outputs
 
+class SequenceToSequenceRegressionHead(nn.Module):
+
+    def __init__(self, hidden_size: int):
+        super().__init__()
+        #self.regression = SimpleConv(hidden_size, 1280, 1)
+        self.regression = SimpleMLP(hidden_size, 600, 1)
+
+    def forward(self, sequence_output, mask, targets=None):
+        predicted_data = self.regression(sequence_output)
+        outputs = (predicted_data,)
+        if targets is not None:
+            loss_fct = nn.MSELoss()
+
+            regression_loss = loss_fct(predicted_data.view(-1), targets.view(-1))
+            regression_loss = (regression_loss * mask.float()).sum()
+            non_zero_elements = mask.sum()
+            regression_loss = regression_loss / non_zero_elements
+
+            #acc_fct = Accuracy(ignore_index=self._ignore_index)
+            metrics = {'accuracy': regression_loss.detach().cuda()}
+
+            loss_and_metrics = (regression_loss, metrics)
+            outputs = (loss_and_metrics,) + outputs
+        return outputs
+
+class ProteinBertForSequence2SequenceRegressor(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.bert = model
+        self.regression = SequenceToSequenceRegressionHead(model.embed_dim)
+
+    @torch.cuda.amp.autocast()
+    def forward(self, input_ids, data_mask, targets=None, finetune=True, finetune_emb=True):
+        for k, v in self.bert.named_parameters():
+            if not finetune:
+                v.requires_grad = False
+            elif not finetune_emb and 'embed_tokens.weight' in k:
+                v.requires_grad = False
+            elif not finetune_emb and 'embed_positions.weight' in k:
+                v.requires_grad = False
+
+        outputs = self.bert(input_ids, repr_layers=[6])
+        sequence_output = outputs['representations'][6]
+        outputs = self.regression(sequence_output, data_mask, targets)
+
+
+        return outputs
