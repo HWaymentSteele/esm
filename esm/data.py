@@ -518,13 +518,17 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
     ):
         super().__init__()
         assert split in [
-            "train",
-            "valid",
-        ], "train_valid must be 'train' or 'valid'"
+            "train_orig",
+            "train_boosted",
+            "train_both",
+            "valid_orig",
+            "valid_boosted",
+            "train_both",
+        ], "split not supported"
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
         self.data_type = data_type
-        self.pkl_dir = os.path.join(self.base_path, "data", self.data_type)
+        self.pkl_dir = os.path.join(self.base_path, "data",)
         self.names = []
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
@@ -533,7 +537,7 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
 
         with open(self.split_file) as f:
             self.names = f.read().splitlines()
-            
+
     def __len__(self):
         return len(self.names)
 
