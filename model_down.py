@@ -63,10 +63,10 @@ class SimpleConv(nn.Module):
 #         correct = (predictions == labels) * valid_mask
 #         return correct.sum().float() / valid_mask.sum().float()
 
-def dyn_accuracy(logits, labels): #, dyn_label: int = 3):
+def dyn_accuracy(logits, labels): 
     with torch.no_grad():
-        # just care about assignments 'static' 2 or 'dynamic' 3
-        valid_mask = torch.logical_or(labels == 2, labels==3)
+        # just care about assignments 3: 'missing', 4: 'static', 5: 'dynamic'
+        valid_mask = (labels >= 3)
         predictions = logits.float().argmax(-1)
         correct = (predictions == labels) * valid_mask
         return correct.sum().float() / valid_mask.sum().float()
@@ -80,7 +80,7 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-weights = [0.1,0.1, 0.1, 1.0, 0.1, 1.0]
+weights = [0.1,0.1, 0.1, 10.0, 0.1, 10.0]
 class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
