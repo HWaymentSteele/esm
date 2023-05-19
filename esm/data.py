@@ -529,7 +529,7 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
         self.dyn_tokenizer = SSP_Tokenizer(vocab='dyn')
-        self.split_file = os.path.join(self.base_path, f"{split}.txt")
+        self.split_file = os.path.join(self.base_path, "split_files", f"{split}.txt")
 
         with open(self.split_file) as f:
             self.names = f.read().splitlines()
