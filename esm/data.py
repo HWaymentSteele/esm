@@ -391,9 +391,11 @@ SSP_VOCAB = OrderedDict([
     ('X',  7)])
 
 DYN_VOCAB = OrderedDict([
-    ('-',  -1),
-    ('0', 0),
-    ('1',  1)])
+    ('N', 1),
+    ('P',  2),
+    ('.',  3),
+    ('-',  4),
+    ('*',  5)])
 
 
 class SSP_Tokenizer():
@@ -433,144 +435,6 @@ class SSP_Tokenizer():
 
 msa_alphabet = Alphabet.from_architecture('msa_transformer')
 msa_batch_converter = msa_alphabet.get_batch_converter()
-
-class ESMStructuralSplitDataset(torch.utils.data.Dataset):
-    """
-    Structural Split Dataset as described in section A.10 of the supplement of our paper.
-    https://doi.org/10.1101/622803
-
-    We use the full version of SCOPe 2.07, clustered at 90% sequence identity,
-    generated on January 23, 2020.
-
-    For each SCOPe domain:
-        - We extract the sequence from the corresponding PDB file
-        - We extract the 3D coordinates of the Carbon beta atoms, aligning them
-          to the sequence. We put NaN where Cb atoms are missing.
-        - From the 3D coordinates, we calculate a pairwise distance map, based
-          on L2 distance
-        - We use DSSP to generate secondary structure labels for the corresponding
-          PDB file. This is also aligned to the sequence. We put - where SSP
-          labels are missing.
-
-    For each SCOPe classification level of family/superfamily/fold (in order of difficulty),
-    we have split the data into 5 partitions for cross validation. These are provided
-    in a downloaded splits folder, in the format:
-            splits/{split_level}/{cv_partition}/{train|valid}.txt
-    where train is the partition and valid is the concatentation of the remaining 4.
-
-    For each SCOPe domain, we provide a pkl dump that contains:
-        - seq    : The domain sequence, stored as an L-length string
-        - ssp    : The secondary structure labels, stored as an L-length string
-        - dist   : The distance map, stored as an LxL numpy array
-        - coords : The 3D coordinates, stored as an Lx3 numpy array
-
-    """
-
-    base_folder = "structural-data"
-    file_list = [
-        #  url  tar filename   filename      MD5 Hash
-        (
-            "https://dl.fbaipublicfiles.com/fair-esm/structural-data/splits.tar.gz",
-            "splits.tar.gz",
-            "splits",
-            "456fe1c7f22c9d3d8dfe9735da52411d",
-        ),
-        (
-            "https://dl.fbaipublicfiles.com/fair-esm/structural-data/pkl.tar.gz",
-            "pkl.tar.gz",
-            "pkl",
-            "644ea91e56066c750cd50101d390f5db",
-        ),
-    ]
-
-    def __init__(
-        self,
-        split_level,
-        cv_partition,
-        split,
-        root_path=os.path.expanduser("~/.cache/torch/data/esm"),
-        download=False,
-    ):
-        super().__init__()
-        assert split in [
-            "train",
-            "valid",
-        ], "train_valid must be 'train' or 'valid'"
-        self.root_path = root_path
-        self.base_path = os.path.join(self.root_path, self.base_folder)
-
-        # check if root path has what you need or else download it
-        if download:
-            self.download()
-
-        self.split_file = os.path.join(
-            self.base_path, "splits", split_level, cv_partition, f"{split}.txt"
-        )
-        self.pkl_dir = os.path.join(self.base_path, "pkl")
-        self.names = []
-        self.ssp_dict=dict()
-        self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
-        with open(self.split_file) as f:
-            self.names = f.read().splitlines()
-
-    def __len__(self):
-        return len(self.names)
-
-    def _check_exists(self) -> bool:
-        for (_, _, filename, _) in self.file_list:
-            fpath = os.path.join(self.base_path, filename)
-            if not os.path.exists(fpath) or not os.path.isdir(fpath):
-                return False
-        return True
-
-    def download(self):
-
-        if self._check_exists():
-            print("Files already downloaded and verified")
-            return
-
-        from torchvision.datasets.utils import download_url
-
-        for url, tar_filename, filename, md5_hash in self.file_list:
-            download_path = os.path.join(self.base_path, tar_filename)
-            download_url(url=url, root=self.base_path, filename=tar_filename, md5=md5_hash)
-            shutil.unpack_archive(download_path, self.base_path)
-
-
-    def __getitem__(self, idx):
-        """
-        Returns a dict with the following entires
-         - seq : Str (domain sequence)
-         - ssp : Str (SSP labels)
-         - dist : np.array (distance map)
-         - coords : np.array (3D coordinates)
-        """
-        name = self.names[idx]
-        pkl_fname = os.path.join(self.pkl_dir, name[1:3], f"{name}.pkl")
-        with open(pkl_fname, "rb") as f:
-            obj = pickle.load(f)
-        sequence = obj['seq']
-        #a3m_name = os.path.join('/home/my/ssp/structural-data/msas',name+'.a3m')
-        #obj.append(name)
-        #msa=read_msa(a3m_name,1)
-        msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
-        input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
-        ssp = self.ssp_tokenizer.convert_tokens_to_ids(obj['ssp'])[:256]
-        labels = np.asarray(ssp, np.int64)+1
-        #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
-        return msa_batch_token,input_mask,labels
-    
-    def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
-        input_ids, input_mask, ss_label = tuple(zip(*batch))
-        input_ids = (pad_sequences(input_ids, 1))
-        input_mask = torch.from_numpy(pad_sequences(input_mask, 1))
-        ss_label = torch.from_numpy(pad_sequences_label(ss_label, -1))
-        ss_label = ss_label + 1
-
-        output = {'input_ids': input_ids,
-                  'input_mask': input_mask,
-                  'targets': ss_label}
-        return output
 
 import numpy as np
 def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
@@ -640,11 +504,8 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
     """
     For each protein, we use a pkl file that contains:
         - seq    : The domain sequence, stored as an L-length string
-        - ssp    : The secondary structure labels, stored as an L-length string
-        - dyn   : The dynamics labels
-       
-    data_type: 'R1R2_label' or 'Rex_MFA_label'. Currently 90 proteins with R1R2 data, 75 with MFA R_ex data.
-    
+        - dssp    : The secondary structure labels, stored as an L-length string
+        - rex_label   : The dynamics labels:     
     """
     base_folder = "RelaxDB"
 
@@ -653,18 +514,17 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         split,
         root_path=os.path.expanduser("~/.cache/torch/data/esm"),
         download=False,
-        data_type='R1R2_label'
+        data_type='boosted'
     ):
         super().__init__()
         assert split in [
             "train",
-            "train_MFA",
             "valid",
-        ], "train_valid must be 'train', 'train_MFA', or 'valid'"
+        ], "train_valid must be 'train' or 'valid'"
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
-        self.pkl_dir = os.path.join(self.base_path, "dyn_data_v2")
         self.data_type = data_type
+        self.pkl_dir = os.path.join(self.base_path, "data", self.data_type)
         self.names = []
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
@@ -694,15 +554,13 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         input_mask = obj['data_mask']
         
         # classifier
-        if 'label' in self.data_type:
-            labels = self.dyn_tokenizer.convert_tokens_to_ids(obj[self.data_type]) #[:256]
-            labels = np.asarray(labels, np.int64)+1
-            #labels = np.pad(labels, (1, 1), 'constant', constant_values=-1)
+        labels = self.dyn_tokenizer.convert_tokens_to_ids(obj['rex_label'])
+        labels = np.asarray(labels, np.int64)+1
 
-            return msa_batch_token,input_mask,labels
+        return msa_batch_token,input_mask,labels
         
-        else: # regressor
-            return msa_batch_token, input_mask, obj[self.data_type]
+#         else: # regressor
+#             return msa_batch_token, input_mask, obj[self.data_type]
     
     def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
         input_ids, input_mask, label = tuple(zip(*batch))
@@ -710,17 +568,17 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         input_mask = torch.from_numpy(pad_sequences(input_mask, 0)) #boolean, False = no data
         
         #classifier
-        if 'label' in self.data_type:
-            label = torch.from_numpy(pad_sequences_label(label, -1))
-            label = label + 1
-            output = {'input_ids': input_ids,
-                  'input_mask': input_mask,
-                  'targets': label}
+        #if 'label' in self.data_type:
+        label = torch.from_numpy(pad_sequences_label(label, -1))
+        label = label + 1
+        output = {'input_ids': input_ids,
+              'input_mask': input_mask,
+              'targets': label}
             
-        else: # regressor
-            data = torch.from_numpy(pad_data(label, 0)).float()
-            output = {'input_ids': input_ids,
-                  'input_mask': input_mask,
-                  'targets': data}
+#         else: # regressor
+#             data = torch.from_numpy(pad_data(label, 0)).float()
+#             output = {'input_ids': input_ids,
+#                   'input_mask': input_mask,
+#                   'targets': data}
 
         return output
