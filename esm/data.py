@@ -391,11 +391,11 @@ SSP_VOCAB = OrderedDict([
     ('X',  7)])
 
 DYN_VOCAB = OrderedDict([
-    ('N', 1),
-    ('P',  2),
-    ('.',  3),
-    ('-',  4),
-    ('*',  5)])
+    ('N', -1),
+    ('P',  0),
+    ('.',  1),
+    ('-',  2),
+    ('*',  3)])
 
 
 class SSP_Tokenizer():
