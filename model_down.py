@@ -6,7 +6,7 @@ from torch.nn.utils.weight_norm import weight_norm
 # from https://github.com/elttaes/Revisiting-PLMs/blob/90ae45755f176458f8b73eee33eb993aae01d460/Structure/ssp/esm/1b/train.py
 # """ / model_down.py
 
-model, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
+model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
 batch_converter = alphabet.get_batch_converter()
 
 def _init_weights(module):
@@ -80,7 +80,7 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-weights = [0.1,0.1, 0.1, 10.0, 0.1, 10.0]
+weights = [0.1,0.1, 0.1, 10.0, 1.0, 10.0]
 class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
@@ -175,8 +175,8 @@ class ProteinBertForSequence2SequenceRegressor(nn.Module):
             elif not finetune_emb and 'embed_positions.weight' in k:
                 v.requires_grad = False
 
-        outputs = self.bert(input_ids, repr_layers=[6])
-        sequence_output = outputs['representations'][6]
+        outputs = self.bert(input_ids, repr_layers=[12])
+        sequence_output = outputs['representations'][12]
         outputs = self.regression(sequence_output, data_mask, targets)
 
 
