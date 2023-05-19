@@ -80,7 +80,7 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-weights = [0.1,0.1, 0.1, 10.0]
+weights = [0.1,0.1, 0.1, 1.0, 0.1, 1.0]
 class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
@@ -112,7 +112,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.num_labels = 4 # changed from 10 for dynamics classification
+        self.num_labels = 6
         self.bert = model
         self.classify = SequenceToSequenceClassificationHead(
             model.embed_dim, self.num_labels)
@@ -137,8 +137,8 @@ class SequenceToSequenceRegressionHead(nn.Module):
 
     def __init__(self, hidden_size: int):
         super().__init__()
-        #self.regression = SimpleConv(hidden_size, 1280, 1)
-        self.regression = SimpleMLP(hidden_size, 600, 1)
+        self.regression = SimpleConv(hidden_size, 1280, 1)
+        #self.regression = SimpleMLP(hidden_size, 600, 1)
 
     def forward(self, sequence_output, mask, targets=None):
         predicted_data = self.regression(sequence_output)
