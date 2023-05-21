@@ -129,13 +129,13 @@ class ProteinBertForSequence2Sequence(nn.Module):
             model.embed_dim, self.num_labels)
 
     @torch.cuda.amp.autocast()
-    def forward(self, input_ids, targets=None, finetune=self.finetune, finetune_emb=self.finetune_emb):
+    def forward(self, input_ids, targets=None):
         for k, v in self.bert.named_parameters():
-            if not finetune:
+            if not self.finetune:
                 v.requires_grad = False
-            elif not finetune_emb and 'embed_tokens.weight' in k:
+            elif not self.finetune_emb and 'embed_tokens.weight' in k:
                 v.requires_grad = False
-            elif not finetune_emb and 'embed_positions.weight' in k:
+            elif not self.finetune_emb and 'embed_positions.weight' in k:
                 v.requires_grad = False
                 
         outputs = self.bert(input_ids, repr_layers=[self.bert.num_layers])
