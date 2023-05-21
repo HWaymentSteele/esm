@@ -110,15 +110,26 @@ class SequenceToSequenceClassificationHead(nn.Module):
 
 class ProteinBertForSequence2Sequence(nn.Module):
 
-    def __init__(self):
+    def __init__(self, version='t6', finetune=True, finetune_emb=True):
         super().__init__()
         self.num_labels = 6
+        self.version = version
+        self.finetune=finetune
+        self.finetune_emb = finetune_emb
+        
+        if self.version=='t6':
+            model, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
+        elif self.version=='t12':
+            model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
+        elif self.version=='t30':
+            model, alphabet = esm.pretrained.esm2_t30_150M_UR50D()
+        
         self.bert = model
         self.classify = SequenceToSequenceClassificationHead(
             model.embed_dim, self.num_labels)
 
     @torch.cuda.amp.autocast()
-    def forward(self, input_ids, targets=None, finetune=True, finetune_emb=True):
+    def forward(self, input_ids, targets=None, finetune=self.finetune, finetune_emb=self.finetune_emb):
         for k, v in self.bert.named_parameters():
             if not finetune:
                 v.requires_grad = False
@@ -126,9 +137,9 @@ class ProteinBertForSequence2Sequence(nn.Module):
                 v.requires_grad = False
             elif not finetune_emb and 'embed_positions.weight' in k:
                 v.requires_grad = False
-
-        outputs = self.bert(input_ids, repr_layers=[6])
-        sequence_output = outputs['representations'][6]
+                
+        outputs = self.bert(input_ids, repr_layers=[self.bert.num_layers])
+        sequence_output = outputs['representations'][self.bert.num_layers]
         outputs = self.classify(sequence_output, targets)
 
         return outputs
