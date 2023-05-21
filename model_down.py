@@ -144,51 +144,51 @@ class ProteinBertForSequence2Sequence(nn.Module):
 
         return outputs
 
-class SequenceToSequenceRegressionHead(nn.Module):
+# class SequenceToSequenceRegressionHead(nn.Module):
 
-    def __init__(self, hidden_size: int):
-        super().__init__()
-        self.regression = SimpleConv(hidden_size, 1280, 1)
-        #self.regression = SimpleMLP(hidden_size, 600, 1)
+#     def __init__(self, hidden_size: int):
+#         super().__init__()
+#         self.regression = SimpleConv(hidden_size, 1280, 1)
+#         #self.regression = SimpleMLP(hidden_size, 600, 1)
 
-    def forward(self, sequence_output, mask, targets=None):
-        predicted_data = self.regression(sequence_output)
-        outputs = (predicted_data,)
-        if targets is not None:
-            loss_fct = nn.MSELoss()
+#     def forward(self, sequence_output, mask, targets=None):
+#         predicted_data = self.regression(sequence_output)
+#         outputs = (predicted_data,)
+#         if targets is not None:
+#             loss_fct = nn.MSELoss()
 
-            regression_loss = loss_fct(predicted_data.view(-1), targets.view(-1))
-            regression_loss = (regression_loss * mask.float()).sum()
-            non_zero_elements = mask.sum()
-            regression_loss = regression_loss / non_zero_elements
+#             regression_loss = loss_fct(predicted_data.view(-1), targets.view(-1))
+#             regression_loss = (regression_loss * mask.float()).sum()
+#             non_zero_elements = mask.sum()
+#             regression_loss = regression_loss / non_zero_elements
 
-            #acc_fct = Accuracy(ignore_index=self._ignore_index)
-            metrics = {'accuracy': regression_loss.detach().cuda()}
+#             #acc_fct = Accuracy(ignore_index=self._ignore_index)
+#             metrics = {'accuracy': regression_loss.detach().cuda()}
 
-            loss_and_metrics = (regression_loss, metrics)
-            outputs = (loss_and_metrics,) + outputs
-        return outputs
+#             loss_and_metrics = (regression_loss, metrics)
+#             outputs = (loss_and_metrics,) + outputs
+#         return outputs
 
-class ProteinBertForSequence2SequenceRegressor(nn.Module):
+# class ProteinBertForSequence2SequenceRegressor(nn.Module):
 
-    def __init__(self):
-        super().__init__()
-        self.bert = model
-        self.regression = SequenceToSequenceRegressionHead(model.embed_dim)
+#     def __init__(self):
+#         super().__init__()
+#         self.bert = model
+#         self.regression = SequenceToSequenceRegressionHead(model.embed_dim)
 
-    @torch.cuda.amp.autocast()
-    def forward(self, input_ids, data_mask, targets=None, finetune=True, finetune_emb=True):
-        for k, v in self.bert.named_parameters():
-            if not finetune:
-                v.requires_grad = False
-            elif not finetune_emb and 'embed_tokens.weight' in k:
-                v.requires_grad = False
-            elif not finetune_emb and 'embed_positions.weight' in k:
-                v.requires_grad = False
+#     @torch.cuda.amp.autocast()
+#     def forward(self, input_ids, data_mask, targets=None, finetune=True, finetune_emb=True):
+#         for k, v in self.bert.named_parameters():
+#             if not finetune:
+#                 v.requires_grad = False
+#             elif not finetune_emb and 'embed_tokens.weight' in k:
+#                 v.requires_grad = False
+#             elif not finetune_emb and 'embed_positions.weight' in k:
+#                 v.requires_grad = False
 
-        outputs = self.bert(input_ids, repr_layers=[12])
-        sequence_output = outputs['representations'][12]
-        outputs = self.regression(sequence_output, data_mask, targets)
+#         outputs = self.bert(input_ids, repr_layers=[12])
+#         sequence_output = outputs['representations'][12]
+#         outputs = self.regression(sequence_output, data_mask, targets)
 
 
-        return outputs
+#         return outputs
