@@ -611,7 +611,7 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
         self.data_type = data_type
-        self.pkl_dir = os.path.join(self.base_path, "data",)
+        self.pkl_dir = os.path.join(self.base_path, "dyn_data_for_esm",)
         self.names = []
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
