@@ -409,7 +409,7 @@ class SSP_Tokenizer():
         elif vocab == 'dyn':
             self.vocab = DYN_VOCAB
         elif vocab == 'assns':
-            self.vocab = ASSNS_VOCAP
+            self.vocab = ASSNS_VOCAB
             
         self.tokens = list(self.vocab.keys())
         self._vocab_type = vocab
