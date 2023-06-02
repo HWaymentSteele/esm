@@ -56,50 +56,41 @@ class SimpleConv(nn.Module):
         x = x.transpose(1, 2).contiguous()
         return x
 
-def accuracy(logits, labels, ignore_index: int = -100):
+def accuracy(logits, labels, ignore_index: int = -1):
     with torch.no_grad():
         valid_mask = (labels != ignore_index)
         predictions = logits.float().argmax(-1)
         correct = (predictions == labels) * valid_mask
         return correct.sum().float() / valid_mask.sum().float()
 
-def dyn_accuracy(logits, labels): 
-    with torch.no_grad():
-        # just care about assignments 3: 'missing', 4: 'static', 5: 'dynamic'
-        valid_mask = (labels >= 3)
-        predictions = logits.float().argmax(-1)
-        correct = (predictions == labels) * valid_mask
-        return correct.sum().float() / valid_mask.sum().float()
-
 class Accuracy(nn.Module):
 
-    def __init__(self, ignore_index: int = -100):
+    def __init__(self, ignore_index: int = -1):
         super().__init__()
         self.ignore_index = ignore_index
 
     def forward(self, inputs, target):
         return accuracy(inputs, target) #,  self.ignore_index)
 
-#weights = [0.1,0.1, 0.1, 10.0, 1.0, 10.0]
-weights = [1.0, 1.0,10.0]
-class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
 
     def __init__(self,
                  hidden_size: int,
                  num_labels: int,
-                 ignore_index: int = 0):
+                 ignore_index: int = 0,
+                 missing_loss_weight: float=1.0):
         super().__init__()
         self.classify = SimpleConv(hidden_size, 1280, num_labels)
         self.num_labels = num_labels
         self._ignore_index = ignore_index
+        self.loss_weights = torch.FloatTensor([1.0,1.0, missing_loss_weight]).cuda()
 
     def forward(self, sequence_output, targets=None):
         sequence_logits = self.classify(sequence_output)
         outputs = (sequence_logits,)
         if targets is not None:
-            loss_fct = nn.CrossEntropyLoss(weight = class_weights,ignore_index=self._ignore_index)
+            loss_fct = nn.CrossEntropyLoss(weight = self.loss_weights, ignore_index=self._ignore_index)
             classification_loss = loss_fct(
                 sequence_logits.view(-1, self.num_labels), targets.view(-1))
             acc_fct = Accuracy(ignore_index=self._ignore_index)
@@ -111,23 +102,26 @@ class SequenceToSequenceClassificationHead(nn.Module):
 
 class ProteinBertForSequence2Sequence(nn.Module):
 
-    def __init__(self, version='t6', finetune=True, finetune_emb=True):
+    def __init__(self, version='t6', finetune=True, finetune_emb=True, missing_loss_weight=1.0):
         super().__init__()
         self.num_labels = 3 #6
         self.version = version
         self.finetune=finetune
         self.finetune_emb = finetune_emb
-        
+        self.missing_loss_weight = missing_loss_weight
+
         if self.version=='t6':
             model, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
         elif self.version=='t12':
             model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
         elif self.version=='t30':
             model, alphabet = esm.pretrained.esm2_t30_150M_UR50D()
+        elif self.version=='t33':
+            model, alphabet = esm.pretrained.esm2_t33_650M_UR50D()
         
         self.bert = model
         self.classify = SequenceToSequenceClassificationHead(
-            model.embed_dim, self.num_labels)
+            model.embed_dim, self.num_labels, missing_loss_weight=self.missing_loss_weight)
 
     @torch.cuda.amp.autocast()
     def forward(self, input_ids, targets=None):
