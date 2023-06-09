@@ -390,12 +390,25 @@ SSP_VOCAB = OrderedDict([
     ('S',  6),
     ('X',  7)])
 
+# DYN_VOCAB = OrderedDict([
+#     ('N', -1),
+#     ('P',  0),
+#     ('.',  1),
+#     ('-',  2),
+#     ('*',  3)])
+
+
 DYN_VOCAB = OrderedDict([
     ('N', -1),
-    ('P',  0),
-    ('.',  1),
-    ('-',  2),
-    ('*',  3)])
+    ('M',  0),
+    ('P',  1),
+    ('1',  2),
+    ('2',  3),
+    ('3',  4)
+    ('4',  5)
+    ('5',  6)
+    ('B',  7)])
+
 
 ASSNS_VOCAB = OrderedDict([
     ('A', -1),
@@ -563,7 +576,7 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         #input_mask = obj['data_mask']
         
         # classifier
-        labels = self.dyn_tokenizer.convert_tokens_to_ids(obj['rex_label'])
+        labels = self.dyn_tokenizer.convert_tokens_to_ids(obj['dyn'])
         labels = np.asarray(labels, np.int64)+1
 
         return msa_batch_token,labels
