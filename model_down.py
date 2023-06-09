@@ -80,7 +80,7 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-weights = [0.1,0.1, 0.1, 10.0, 1.0, 10.0]
+weights = [0.1,0.1,0.1, 0.1, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
