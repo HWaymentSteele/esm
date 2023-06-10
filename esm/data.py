@@ -400,14 +400,14 @@ SSP_VOCAB = OrderedDict([
 
 DYN_VOCAB = OrderedDict([
     ('N', -1),
-    ('M',  0),
-    ('P',  1),
-    ('1',  2),
-    ('2',  3),
-    ('3',  4)
-    ('4',  5)
-    ('5',  6)
-    ('B',  7)])
+    ('M',  -1),
+    ('P',  0),
+    ('1',  1),
+    ('2',  2),
+    ('3',  3),
+    ('4',  4),
+    ('5',  5),
+    ('B',  6)])
 
 
 ASSNS_VOCAB = OrderedDict([
@@ -535,14 +535,14 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
         data_type='boosted'
     ):
         super().__init__()
-        assert split in [
-            "train_orig",
-            "train_boosted",
-            "train_both",
-            "valid_orig",
-            "valid_boosted",
-            "train_both",
-        ], "split not supported"
+        # assert split in [
+        #     "train_orig",
+        #     "train_boosted",
+        #     "train_both",
+        #     "valid_orig",
+        #     "valid_boosted",
+        #     "train_both",
+        # ], "split not supported"
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
         self.data_type = data_type
@@ -573,34 +573,20 @@ class LabeledDynamicsDataset(torch.utils.data.Dataset):
 
         sequence = obj['sequence']
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
-        #input_mask = obj['data_mask']
         
         # classifier
         labels = self.dyn_tokenizer.convert_tokens_to_ids(obj['dyn'])
         labels = np.asarray(labels, np.int64)+1
 
         return msa_batch_token,labels
-        
-#         else: # regressor
-#             return msa_batch_token, input_mask, obj[self.data_type]
-    
+
     def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
         input_ids, label = tuple(zip(*batch))
         input_ids = (pad_sequences(input_ids, 1))
-        #input_mask = torch.from_numpy(pad_sequences(input_mask, 0)) #boolean, False = no data
-        
-        #classifier
-        #if 'label' in self.data_type:
         label = torch.from_numpy(pad_sequences_label(label, -1))
         label = label + 1
         output = {'input_ids': input_ids,
               'targets': label}
-            
-#         else: # regressor
-#             data = torch.from_numpy(pad_data(label, 0)).float()
-#             output = {'input_ids': input_ids,
-#                   'input_mask': input_mask,
-#                   'targets': data}
 
         return output
 
