@@ -112,7 +112,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
 
     def __init__(self, version='t6', finetune=True, finetune_emb=True):
         super().__init__()
-        self.num_labels = 8
+        self.num_labels = 9
         self.version = version
         self.finetune=finetune
         self.finetune_emb = finetune_emb
