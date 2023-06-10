@@ -65,7 +65,7 @@ class SimpleConv(nn.Module):
 
 def dyn_accuracy(logits, labels): 
     with torch.no_grad():
-        # just care about assignments 3: 'missing', 4: 'static', 5: 'dynamic'
+        # just care about model labels 2-5 and missing assignment label
         valid_mask = (labels >= 3)
         predictions = logits.float().argmax(-1)
         correct = (predictions == labels) * valid_mask
@@ -80,8 +80,8 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-weights = [0.1,0.1,0.1, 0.1, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-class_weights = torch.FloatTensor(weights).cuda()
+# weights = [0.1,0.1,0.1, 0.1, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
 
@@ -98,7 +98,7 @@ class SequenceToSequenceClassificationHead(nn.Module):
         sequence_logits = self.classify(sequence_output)
         outputs = (sequence_logits,)
         if targets is not None:
-            loss_fct = nn.CrossEntropyLoss(weight = class_weights,ignore_index=self._ignore_index)
+            loss_fct = nn.CrossEntropyLoss(ignore_index=self._ignore_index)
             classification_loss = loss_fct(
                 sequence_logits.view(-1, self.num_labels), targets.view(-1))
             acc_fct = Accuracy(ignore_index=self._ignore_index)
@@ -112,7 +112,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
 
     def __init__(self, version='t6', finetune=True, finetune_emb=True):
         super().__init__()
-        self.num_labels = 6
+        self.num_labels = 8
         self.version = version
         self.finetune=finetune
         self.finetune_emb = finetune_emb
@@ -123,6 +123,8 @@ class ProteinBertForSequence2Sequence(nn.Module):
             model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
         elif self.version=='t30':
             model, alphabet = esm.pretrained.esm2_t30_150M_UR50D()
+        elif self.version=='t33':
+            model, alphabet = esm.pretrained.esm2_t33_650M_UR50D()
         
         self.bert = model
         self.classify = SequenceToSequenceClassificationHead(
@@ -143,52 +145,3 @@ class ProteinBertForSequence2Sequence(nn.Module):
         outputs = self.classify(sequence_output, targets)
 
         return outputs
-
-# class SequenceToSequenceRegressionHead(nn.Module):
-
-#     def __init__(self, hidden_size: int):
-#         super().__init__()
-#         self.regression = SimpleConv(hidden_size, 1280, 1)
-#         #self.regression = SimpleMLP(hidden_size, 600, 1)
-
-#     def forward(self, sequence_output, mask, targets=None):
-#         predicted_data = self.regression(sequence_output)
-#         outputs = (predicted_data,)
-#         if targets is not None:
-#             loss_fct = nn.MSELoss()
-
-#             regression_loss = loss_fct(predicted_data.view(-1), targets.view(-1))
-#             regression_loss = (regression_loss * mask.float()).sum()
-#             non_zero_elements = mask.sum()
-#             regression_loss = regression_loss / non_zero_elements
-
-#             #acc_fct = Accuracy(ignore_index=self._ignore_index)
-#             metrics = {'accuracy': regression_loss.detach().cuda()}
-
-#             loss_and_metrics = (regression_loss, metrics)
-#             outputs = (loss_and_metrics,) + outputs
-#         return outputs
-
-# class ProteinBertForSequence2SequenceRegressor(nn.Module):
-
-#     def __init__(self):
-#         super().__init__()
-#         self.bert = model
-#         self.regression = SequenceToSequenceRegressionHead(model.embed_dim)
-
-#     @torch.cuda.amp.autocast()
-#     def forward(self, input_ids, data_mask, targets=None, finetune=True, finetune_emb=True):
-#         for k, v in self.bert.named_parameters():
-#             if not finetune:
-#                 v.requires_grad = False
-#             elif not finetune_emb and 'embed_tokens.weight' in k:
-#                 v.requires_grad = False
-#             elif not finetune_emb and 'embed_positions.weight' in k:
-#                 v.requires_grad = False
-
-#         outputs = self.bert(input_ids, repr_layers=[12])
-#         sequence_output = outputs['representations'][12]
-#         outputs = self.regression(sequence_output, data_mask, targets)
-
-
-#         return outputs
