@@ -8,6 +8,43 @@ from torch.nn.utils.weight_norm import weight_norm
 
 #model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
 #batch_converter = alphabet.get_batch_converter()
+import torch.nn.functional as F
+
+class SimpleTransformer(nn.Module):
+    def __init__(self, in_dim, hid_dim, out_dim, dropout=0.):
+        super().__init__()
+        self.embedding = nn.Linear(in_dim, hid_dim)
+        self.positional_encoding = PositionalEncoding(hid_dim)
+        self.transformer_layer = nn.TransformerEncoderLayer(d_model=hid_dim, nhead=4)
+        self.transformer = nn.TransformerEncoder(self.transformer_layer, num_layers=2)
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(hid_dim, out_dim)
+
+    def forward(self, x):
+        embedded = self.embedding(x)
+        embedded = embedded.transpose(0, 1)
+        encoded = self.positional_encoding(embedded)
+        transformed = self.transformer(encoded)
+        transformed = transformed.transpose(0, 1)
+        transformed = self.dropout(transformed)
+        output = self.fc(transformed)
+        return output.squeeze(2)
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, hid_dim, max_len=100):
+        super().__init__()
+        self.dropout = nn.Dropout(0.1)
+        pe = torch.zeros(max_len, hid_dim)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, hid_dim, 2).float() * (-torch.log(torch.tensor(10000.0)) / hid_dim))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:, :x.size(1)]
+        return self.dropout(x)
 
 def _init_weights(module):
     """ Initialize the weights """
@@ -56,6 +93,21 @@ class SimpleConv(nn.Module):
         x = x.transpose(1, 2).contiguous()
         return x
 
+class SimpleConv2D(nn.Module):
+    def __init__(self, in_dim, hid_dim, out_dim, dropout=0.):
+        super().__init__()
+        self.main = nn.Sequential(
+            nn.BatchNorm2d(in_dim),
+            nn.Conv2d(in_dim, hid_dim, kernel_size=(5, 1), padding=(2, 0)),
+            nn.ReLU(),
+            nn.Dropout2d(dropout, inplace=True),
+            nn.Conv2d(hid_dim, out_dim, kernel_size=(3, 1), padding=(1, 0)))
+
+    def forward(self, x):
+        x = x.transpose(1, 2)
+        x = self.main(x)
+        x = x.transpose(1, 2).contiguous()
+        return x
 # def accuracy(logits, labels, ignore_index: int = -100):
 #     with torch.no_grad():
 #         valid_mask = (labels != ignore_index)
@@ -90,7 +142,8 @@ class SequenceToSequenceClassificationHead(nn.Module):
                  num_labels: int,
                  ignore_index: int = 0):
         super().__init__()
-        self.classify = SimpleConv(hidden_size, 1280, num_labels)
+        #self.classify = SimpleConv(hidden_size, 1280, num_labels)
+        self.classify = SimpleMLP(hidden_size, 1280, num_labels)
         self.num_labels = num_labels
         self._ignore_index = ignore_index
 
@@ -128,7 +181,9 @@ class ProteinBertForSequence2Sequence(nn.Module):
         
         self.bert = model
         self.classify = SequenceToSequenceClassificationHead(
-            model.embed_dim, self.num_labels)
+            model.embed_dim*(self.bert.num_layers+1), self.num_labels)
+
+        print(self.bert.embed_dim)
 
     @torch.cuda.amp.autocast()
     def forward(self, input_ids, targets=None):
@@ -141,8 +196,11 @@ class ProteinBertForSequence2Sequence(nn.Module):
                 v.requires_grad = False
                 
         outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
-        sequence_output = torch.concat([outputs['representations'][x]
-                                          for x in range(self.bert.num_layers)])
-        outputs = self.classify(sequence_output, targets)
+        #outputs = self.bert(input_ids, repr_layers=[self.bert.num_layers])
+        #outs = outputs['representations'][self.bert.num_layers]
+        outs = torch.stack([v for _, v in sorted(outputs["representations"].items())],dim=2)
+        shp = outs.shape
+        outs = outs.view(shp[0], shp[1], -1)
+        outputs = self.classify(outs, targets)
 
         return outputs
