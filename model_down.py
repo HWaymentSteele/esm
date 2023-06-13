@@ -142,7 +142,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
                 
         outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
         sequence_output = torch.concat([outputs['representations'][x]
-                                          for x in self.bert.num_layers])
+                                          for x in range(self.bert.num_layers)])
         outputs = self.classify(sequence_output, targets)
 
         return outputs
