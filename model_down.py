@@ -80,8 +80,8 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return dyn_accuracy(inputs, target) #,  self.ignore_index)
 
-# weights = [0.1,0.1,0.1, 0.1, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-# class_weights = torch.FloatTensor(weights).cuda()
+weights = [0.1,0.1,0.1, 0.1, 10.0, 10.0, 10.0, 10.0, 10.0]
+class_weights = torch.FloatTensor(weights).cuda()
 
 class SequenceToSequenceClassificationHead(nn.Module):
 
@@ -98,7 +98,7 @@ class SequenceToSequenceClassificationHead(nn.Module):
         sequence_logits = self.classify(sequence_output)
         outputs = (sequence_logits,)
         if targets is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=self._ignore_index)
+            loss_fct = nn.CrossEntropyLoss(weight=class_weights, ignore_index=self._ignore_index)
             classification_loss = loss_fct(
                 sequence_logits.view(-1, self.num_labels), targets.view(-1))
             acc_fct = Accuracy(ignore_index=self._ignore_index)
@@ -140,8 +140,9 @@ class ProteinBertForSequence2Sequence(nn.Module):
             elif not self.finetune_emb and 'embed_positions.weight' in k:
                 v.requires_grad = False
                 
-        outputs = self.bert(input_ids, repr_layers=[self.bert.num_layers])
-        sequence_output = outputs['representations'][self.bert.num_layers]
+        outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
+        sequence_output = torch.concat([outputs['representations'][x]
+                                          for x in self.bert.num_layers])
         outputs = self.classify(sequence_output, targets)
 
         return outputs
