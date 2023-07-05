@@ -30,7 +30,7 @@ class SequenceToSequenceClassificationHead(nn.Module):
                  # num_labels: int,
                  # ignore_index: int = 0,
                  # missing_loss_weight: float=1.0):
-                 
+
         super().__init__()
         print('hidden_size', hidden_size)
         self.finetuning_method = finetuning_method
@@ -104,7 +104,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
             self.hidden_size = [model_embed_dim]
 
         self.classify = SequenceToSequenceClassificationHead(self.embedding_layer,
-            self.finetuning_method, self.hidden_size)
+            self.finetuning_method, self.hidden_size, self.num_labels)
 
             # model.embed_dim*(self.bert.num_layers+1),
             # self.num_labels, missing_loss_weight=self.missing_loss_weight)
