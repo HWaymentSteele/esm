@@ -1,109 +1,7 @@
 import torch
 import esm
 import torch.nn as nn
-from torch.nn.utils.weight_norm import weight_norm
-
-# from https://github.com/elttaes/Revisiting-PLMs/blob/90ae45755f176458f8b73eee33eb993aae01d460/Structure/ssp/esm/1b/train.py
-# """ / model_down.py
-
-#model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
-#batch_converter = alphabet.get_batch_converter()
-
-def _init_weights(module):
-    """ Initialize the weights """
-    if isinstance(module, nn.LayerNorm):
-        module.bias.data.zero_()
-        module.weight.data.fill_(1.0)
-    elif isinstance(module, nn.Linear) and module.bias is not None:
-        module.bias.data.zero_()
-
-class SimpleMLP(nn.Module):
-
-    def __init__(self,
-                 in_dim: int,
-                 hid_dim: int,
-                 out_dim: int,
-                 dropout: float = 0.):
-        super().__init__()
-        self.main = nn.Sequential(
-            nn.utils.weight_norm(nn.Linear(in_dim, hid_dim), dim=None),
-            nn.ReLU(),
-            nn.Dropout(dropout, inplace=True),
-            nn.utils.weight_norm(nn.Linear(hid_dim, out_dim), dim=None))
-        self.apply(_init_weights)
-
-    def forward(self, x):
-        return self.main(x)
-
-class SimpleConv(nn.Module):
-
-    def __init__(self,
-                 in_dim: int,
-                 hid_dim: int,
-                 out_dim: int,
-                 dropout: float = 0.):
-        super().__init__()
-        self.main = nn.Sequential(
-            nn.BatchNorm1d(in_dim), 
-            weight_norm(nn.Conv1d(in_dim, hid_dim, 5, padding=2), dim=None),
-            nn.ReLU(),
-            nn.Dropout(dropout, inplace=True),
-            weight_norm(nn.Conv1d(hid_dim, out_dim, 3, padding=1), dim=None))
-
-    def forward(self, x):
-        x = x.transpose(1, 2)
-        x = self.main(x)
-        x = x.transpose(1, 2).contiguous()
-        return x
-
-import torch.nn.functional as F
-
-
-class Transformer(nn.Module):
-
-    def __init__(self,
-                 in_dim: int,
-                 hid_dim: int,
-                 out_dim: int,
-                 dropout: float = 0.,
-                 num_heads: int = 4,
-                 feed_forward_dim: int = 2048):
-        super().__init__()
-
-        self.linear1 = nn.Linear(in_dim, hid_dim)
-        self.dropout = nn.Dropout(dropout)
-        self.self_attention = nn.MultiheadAttention(hid_dim, num_heads)
-        self.linear2 = nn.Linear(hid_dim, out_dim)
-
-        self.feed_forward = nn.Sequential(
-            nn.Linear(hid_dim, feed_forward_dim),
-            nn.ReLU(),
-            nn.Linear(feed_forward_dim, hid_dim)
-        )
-
-        self.apply(self._init_weights)
-
-    def forward(self, x):
-        x = self.linear1(x)
-        x = self.dropout(x)
-
-        # Self-attention
-        x = x.permute(1, 0, 2)  # Reshape for multihead attention
-        x, _ = self.self_attention(x, x, x)
-        x = x.permute(1, 0, 2)  # Reshape back
-
-        # Feed-forward
-        x = self.feed_forward(x)
-
-        x = self.linear2(x)
-        return x
-
-    @staticmethod
-    def _init_weights(module):
-        if isinstance(module, nn.Linear):
-            nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
+from classifier_modules import *
 
 def accuracy(logits, labels, ignore_index: int = 0):
     with torch.no_grad():
@@ -121,18 +19,29 @@ class Accuracy(nn.Module):
     def forward(self, inputs, target):
         return accuracy(inputs, target) #,  self.ignore_index)
 
-
 class SequenceToSequenceClassificationHead(nn.Module):
 
     def __init__(self,
-                 hidden_size: int,
-                 num_labels: int,
-                 ignore_index: int = 0,
-                 missing_loss_weight: float=1.0):
+                embedding_layer: str = 'all',
+                finetuning_method: str = 'conv',
+                hidden_size: list = [320]):
+                 # num_labels: int,
+                 # ignore_index: int = 0,
+                 # missing_loss_weight: float=1.0):
         super().__init__()
         print('hidden_size', hidden_size)
-        self.classify = Transformer(hidden_size, 1280, num_labels)
-        #self.classify = SimpleMLP2D(hidden_size_1, hidden_size_2, 1280, num_labels)
+        self.finetuning_method = finetuning_method
+        self.embedding_layer = embedding_layer
+
+        if self.finetuning_method == 'transformer' and self.embedding_layer.isint():
+            self.classify = Transformer(hidden_size[0], 1280, num_labels)
+
+        elif self.finetuning_method == 'MLP' and self.embedding_layer.isint():
+            self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
+
+        elif self.finetuning_method == 'axialAttn' and self.embedding_layer == 'all':
+            self.classify = AxialAttn(hidden_size, 1280, num_labels)
+
 
         self.num_labels = num_labels
         self._ignore_index = ignore_index
@@ -154,8 +63,19 @@ class SequenceToSequenceClassificationHead(nn.Module):
 
 class ProteinBertForSequence2Sequence(nn.Module):
 
-    def __init__(self, version='t6', finetune=True, finetune_emb=True, missing_loss_weight=1.0):
+    def __init__(self, version='t6',
+        embedding_layer='all',
+        finetuning_method='conv',
+        finetune=True,
+        finetune_emb=True,
+        missing_loss_weight=1.0):
         super().__init__()
+        self.embedding_layer = embedding_layer
+
+        if self.embedding_layer.isint():
+            assert(self.embedding_layer < self.bert.num_layers)
+
+        self.finetuning_method = finetuning_method
         self.num_labels = 3 #6
         self.version = version
         self.finetune=finetune
@@ -173,9 +93,18 @@ class ProteinBertForSequence2Sequence(nn.Module):
         
         self.bert = model
         print('num_layers, embed_dim', self.bert.num_layers+1, model.embed_dim)
-        self.classify = SequenceToSequenceClassificationHead(
-            model.embed_dim*(self.bert.num_layers+1),
-            self.num_labels, missing_loss_weight=self.missing_loss_weight)
+
+        if self.embedding_layer == 'all':
+            self.hidden_size = [model.embed_dim, self.bert.num_layers+1]
+        elif self.embedding_layer.isint():
+            self.hidden_size = [model_embed_dim]
+
+        self.classify = SequenceToSequenceClassificationHead(self.embedding_layer,
+            self.finetuning_method, self.hidden_size)
+
+            # model.embed_dim*(self.bert.num_layers+1),
+            # self.num_labels, missing_loss_weight=self.missing_loss_weight)
+
         #self.classify = SequenceToSequenceClassificationHead(
         #    model.embed_dim, self.bert.num_layers+1,
         #    self.num_labels, missing_loss_weight=self.missing_loss_weight)
@@ -191,10 +120,18 @@ class ProteinBertForSequence2Sequence(nn.Module):
             elif not self.finetune_emb and 'embed_positions.weight' in k:
                 v.requires_grad = False
                  
-        outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
-        outs = torch.stack([v for _, v in sorted(outputs["representations"].items())],dim=2)
-        shp = outs.shape
-        outs = outs.view(shp[0], shp[1], -1)
-        outputs = self.classify(outs, targets)
+
+        if self.embedding_layer == 'all':
+            # not flattening. output should be batch x 256 x n_layers x embedding
+            outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
+            outs = torch.stack([v for _, v in sorted(outputs["representations"].items())],dim=2)
+            #shp = outs.shape
+            #outs = outs.view(shp[0], shp[1], -1)
+            outputs = self.classify(outs, targets)
+
+        elif self.embedding_layer.isint():
+            outputs = self.bert(input_ids, repr_layers=[self.embedding_layer])
+            outs = outputs['representations'][self.embedding_layer]
+            outputs = self.classify(outs, targets)
 
         return outputs
