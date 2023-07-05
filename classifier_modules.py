@@ -25,13 +25,13 @@ class SimpleMLP(nn.Module):
         return self.main(x)
 
     @staticmethod
-	def _init_weights(module):
-	    """ Initialize the weights """
-	    if isinstance(module, nn.LayerNorm):
-	        module.bias.data.zero_()
-	        module.weight.data.fill_(1.0)
-	    elif isinstance(module, nn.Linear) and module.bias is not None:
-	        module.bias.data.zero_()
+    def _init_weights(module):
+        """ Initialize the weights """
+        if isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
 
 ##### Simple Conv #####
 
@@ -124,12 +124,12 @@ class AxialAttn(nn.Module):
         # input should be batch x 256 x n_layers x embedding
 
         self.self_attention = AxialAttention(
-				    dim = embedding_size,               # embedding dimension
-				    dim_index = 3,         # where is the embedding dimension
-				    heads = 8,             # number of heads for multi-head attention
-				    num_dimensions = 2,    # number of axial dimensions (images is 2, video is 3, or more)
-				    sum_axial_out = True   # whether to sum the contributions of attention on each axis, or to run the input through them sequentially. defaults to true
-				)
+                    dim = embedding_size,               # embedding dimension
+                    dim_index = 3,         # where is the embedding dimension
+                    heads = 8,             # number of heads for multi-head attention
+                    num_dimensions = 2,    # number of axial dimensions (images is 2, video is 3, or more)
+                    sum_axial_out = True   # whether to sum the contributions of attention on each axis, or to run the input through them sequentially. defaults to true
+                )
 
         self.feed_forward = nn.Sequential(
             nn.Linear(embedding_size-n_layers+1, feed_forward_dim),
