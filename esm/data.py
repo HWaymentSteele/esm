@@ -14,7 +14,7 @@ from pathlib import Path
 from esm.constants import proteinseq_toks
 
 RawMSA = Sequence[Tuple[str, str]]
-
+CROP_LEN=256
 
 class FastaBatchedDataset(object):
     def __init__(self, sequence_labels, sequence_strs):
@@ -133,7 +133,7 @@ class Alphabet(object):
     def to_dict(self):
         return self.tok_to_idx.copy()
 
-    def get_batch_converter(self, truncation_seq_length: int = None):
+    def get_batch_converter(self, truncation_seq_length: int = CROP_LEN):
         if self.use_msa:
             return MSABatchConverter(self, truncation_seq_length)
         else:
@@ -309,8 +309,8 @@ class MSABatchConverter(BatchConverter):
 
         batch_size = len(raw_batch)
         max_alignments = max(len(msa) for msa in raw_batch)
-        max_seqlen = max(len(msa[0][1]) for msa in raw_batch)
-        #max_seqlen=256 # hkws hack copied from revisiting-PLMs
+        #max_seqlen = max(len(msa[0][1]) for msa in raw_batch)
+        max_seqlen=256 # hkws hack copied from revisiting-PLMs
         tokens = torch.empty(
             (
                 batch_size,
@@ -457,8 +457,9 @@ msa_batch_converter = msa_alphabet.get_batch_converter()
 import numpy as np
 def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
-    shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
-    #shape = [batch_size] + [256]
+    #shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
+    shape = [batch_size] + [CROP_LEN]
+    #print('pad_sequences_label shape', shape)
     if dtype is None:
         dtype = sequences[0].dtype
 
@@ -478,8 +479,8 @@ def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np
 
 def pad_data(data: np.ndarray, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(data)
-    shape = [batch_size] + [np.max([len(seq) for seq in data])]
-    #shape = [batch_size] + [256]
+    #shape = [batch_size] + [np.max([len(seq) for seq in data])]
+    shape = [batch_size] + [CROP_LEN]
     if dtype is None:
         dtype = data[0].dtype
 
@@ -499,8 +500,9 @@ def pad_data(data: np.ndarray, constant_value=0, dtype=None) -> np.ndarray:
 def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
     shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
-    #print(shape)
-    #shape = [batch_size] + np.max([256],0).tolist()
+    #print('pad_sequences', shape)
+    #shape = [batch_size] + [CROP_LEN]
+    #shape = [batch_size] + np.max([CROP_LEN],0).tolist()
     if dtype is None:
         dtype = sequences[0].dtype
 
@@ -610,7 +612,7 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
         self.data_type = data_type
-        self.pkl_dir = os.path.join(self.base_path, "dyn_data_for_esm",)
+        self.pkl_dir = os.path.join(self.base_path, "dyn_data_jul4",)
         self.names = []
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
@@ -638,7 +640,7 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
         #input_mask = obj['data_mask']
         
-        labels = self.assn_tokenizer.convert_tokens_to_ids(obj['assns'])
+        labels = self.assn_tokenizer.convert_tokens_to_ids(obj['assns'])[:CROP_LEN]
         labels = np.asarray(labels, np.int64)+1
 
         return msa_batch_token,labels
