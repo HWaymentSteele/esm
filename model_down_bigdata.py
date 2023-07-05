@@ -33,10 +33,10 @@ class SequenceToSequenceClassificationHead(nn.Module):
         self.finetuning_method = finetuning_method
         self.embedding_layer = embedding_layer
 
-        if self.finetuning_method == 'transformer' and self.embedding_layer.isint():
+        if self.finetuning_method == 'transformer' and self.embedding_layer != 'all':
             self.classify = Transformer(hidden_size[0], 1280, num_labels)
 
-        elif self.finetuning_method == 'MLP' and self.embedding_layer.isint():
+        elif self.finetuning_method == 'MLP' and self.embedding_layer != 'all':
             self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
 
         elif self.finetuning_method == 'axialAttn' and self.embedding_layer == 'all':
@@ -72,8 +72,9 @@ class ProteinBertForSequence2Sequence(nn.Module):
         super().__init__()
         self.embedding_layer = embedding_layer
 
-        if self.embedding_layer.isint():
-            assert(self.embedding_layer < self.bert.num_layers)
+        if self.embedding_layer != 'all':
+            # if not 'all', embedding_layer should be an int less than total layers
+            assert(int(self.embedding_layer) < self.bert.num_layers)
 
         self.finetuning_method = finetuning_method
         self.num_labels = 3 #6
