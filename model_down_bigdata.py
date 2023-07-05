@@ -24,10 +24,13 @@ class SequenceToSequenceClassificationHead(nn.Module):
     def __init__(self,
                 embedding_layer: str = 'all',
                 finetuning_method: str = 'conv',
+                num_labels: int,
                 hidden_size: list = [320]):
+
                  # num_labels: int,
                  # ignore_index: int = 0,
                  # missing_loss_weight: float=1.0):
+                 
         super().__init__()
         print('hidden_size', hidden_size)
         self.finetuning_method = finetuning_method
