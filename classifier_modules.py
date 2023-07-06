@@ -65,7 +65,7 @@ class Transformer(nn.Module):
                  hid_dim: int,
                  out_dim: int,
                  dropout: float = 0.,
-                 num_heads: int = 4,
+                 num_heads: int = 1,
                  feed_forward_dim: int = 2048):
         super().__init__()
 
@@ -120,13 +120,12 @@ class AxialAttn(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.embedding_size = embedding_size
         self.n_layers = n_layers
-
         # input should be batch x 256 x n_layers x embedding
 
         self.self_attention = AxialAttention(
                     dim = embedding_size,               # embedding dimension
                     dim_index = 3,         # where is the embedding dimension
-                    heads = 8,             # number of heads for multi-head attention
+                    heads = 1,             # number of heads for multi-head attention
                     num_dimensions = 2,    # number of axial dimensions (images is 2, video is 3, or more)
                     sum_axial_out = True   # whether to sum the contributions of attention on each axis, or to run the input through them sequentially. defaults to true
                 )
@@ -145,20 +144,15 @@ class AxialAttn(nn.Module):
 
         # Self-attention
         x = self.self_attention(x)
-        print(x.shape)
 
         # Pool
         pool = nn.MaxPool2d(kernel_size=self.n_layers, stride=1)
         x = pool(x)
-        print(x.shape)
 
         x = x.squeeze()
-        print(x.shape)
 
         # Feed-forward
         x = self.feed_forward(x)
-        print(x.shape)
-
         x = self.linear(x)
 
         return x

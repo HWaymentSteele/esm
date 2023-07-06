@@ -22,10 +22,12 @@ class Accuracy(nn.Module):
 class SequenceToSequenceClassificationHead(nn.Module):
 
     def __init__(self,
-                embedding_layer: str = 'all',
-                finetuning_method: str = 'conv',
+                embedding_layer: str,
+                finetuning_method: str,
                 num_labels: int,
-                hidden_size: list = [320]):
+                hidden_size: list = [320],
+                ignore_index: int=0,
+                missing_loss_weight: float=1.0):
 
                  # num_labels: int,
                  # ignore_index: int = 0,
@@ -43,7 +45,7 @@ class SequenceToSequenceClassificationHead(nn.Module):
             self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
 
         elif self.finetuning_method == 'axialAttn' and self.embedding_layer == 'all':
-            self.classify = AxialAttn(hidden_size, 1280, num_labels)
+            self.classify = AxialAttn(hidden_size[0], hidden_size[1], num_labels)
 
 
         self.num_labels = num_labels
@@ -104,7 +106,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
             self.hidden_size = [model_embed_dim]
 
         self.classify = SequenceToSequenceClassificationHead(self.embedding_layer,
-            self.finetuning_method, self.hidden_size, self.num_labels)
+            self.finetuning_method, self.num_labels, self.hidden_size)
 
             # model.embed_dim*(self.bert.num_layers+1),
             # self.num_labels, missing_loss_weight=self.missing_loss_weight)
