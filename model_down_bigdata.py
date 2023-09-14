@@ -94,7 +94,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
         if self.finetuning_method == 'axialAttn':
             self.hidden_size = [model.embed_dim, self.bert.num_layers+1]
         elif self.finetuning_method == 'MLP_all':
-            self.hidden_size = [model.embed_dim * self.bert.num_layers+1]
+            self.hidden_size = [model.embed_dim * (self.bert.num_layers+1)]
         elif self.finetuning_method == 'MLP_single':
             self.hidden_size = [model.embed_dim]
 
