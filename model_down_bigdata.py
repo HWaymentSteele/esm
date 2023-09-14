@@ -95,9 +95,11 @@ class ProteinBertForSequence2Sequence(nn.Module):
             
         print('num_layers, embed_dim', self.bert.num_layers+1, model.embed_dim)
 
-        if self.embedding_layer == 'all':
+        if self.finetuning_type == 'axialAttn':
             self.hidden_size = [model.embed_dim, self.bert.num_layers+1]
-        else:
+        elif self.finetuning_type == 'MLP_all':
+            self.hidden_size = [model.embed_dim * self.bert.num_layers+1]
+        elif self.finetuning_type == 'MLP_single':
             self.hidden_size = [model.embed_dim]
 
         self.classify = SequenceToSequenceClassificationHead(self.embedding_layer,
@@ -121,8 +123,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
             elif not self.finetune_emb and 'embed_positions.weight' in k:
                 v.requires_grad = False
                  
-
-        if self.embedding_layer == 'all':
+        if self.finetuning_type == 'axialAttn':
             # not flattening. output should be batch x 256 x n_layers x embedding
             outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
             outs = torch.stack([v for _, v in sorted(outputs["representations"].items())],dim=2)
@@ -130,7 +131,14 @@ class ProteinBertForSequence2Sequence(nn.Module):
             #outs = outs.view(shp[0], shp[1], -1)
             outputs = self.classify(outs, targets)
 
-        else:
+        elif self.finetuning_type == 'MLP_all':
+            outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
+            outs = torch.stack([v for _, v in sorted(outputs["representations"].items())],dim=2)
+            shp = outs.shape
+            outs = outs.view(shp[0], shp[1], -1)
+            outputs = self.classify(outs, targets)
+            
+        elif self.finetuning_type == 'MLP_single':
             emb_layer = int(self.embedding_layer)
             outputs = self.bert(input_ids, repr_layers=[emb_layer])
             outs = outputs['representations'][emb_layer]
