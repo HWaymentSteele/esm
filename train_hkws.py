@@ -19,6 +19,7 @@ if __name__=='__main__':
     parser.add_argument('--finetuning_method', type=str, default='axialAttn', help="Finetuning method: 'MLP_single','MLP_all','axialAttn'")
     parser.add_argument('--epochs', type=int, default=100, help='n_epochs')
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
+    parser.add_argument('--job_id', type=str, help='unique id to save models under')
 
     args = parser.parse_args()
     epochs = args.epochs
@@ -107,7 +108,7 @@ if __name__=='__main__':
                           "optim_state_dict": optimizer.state_dict(),
                           "epoch": epoch}
             print("Save model! Best val Accuracy is: {:.8f}.".format(val_acc))
-            torch.save(save_data, "best_model_%s_w%.2f_split%d.pt" % (version,missing_loss_weight,split))
+            torch.save(save_data, "best_model_%s.pt" % (args.job_id))
             best_acc = val_acc
         print(
             "\nEpoch: {} / {} finish. Training Loss: {:.8f}.  Validating Loss: {:.8f}.\n"
