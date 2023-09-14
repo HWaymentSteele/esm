@@ -101,8 +101,8 @@ class ProteinBertForSequence2Sequence(nn.Module):
 
         if self.embedding_layer == 'all':
             self.hidden_size = [model.embed_dim, self.bert.num_layers+1]
-        elif self.embedding_layer.isint():
-            self.hidden_size = [model_embed_dim]
+        else:
+            self.hidden_size = [model.embed_dim]
 
         self.classify = SequenceToSequenceClassificationHead(self.embedding_layer,
             self.finetuning_method, self.num_labels, self.hidden_size)
