@@ -134,9 +134,10 @@ class ProteinBertForSequence2Sequence(nn.Module):
             #outs = outs.view(shp[0], shp[1], -1)
             outputs = self.classify(outs, targets)
 
-        elif self.embedding_layer.isint():
-            outputs = self.bert(input_ids, repr_layers=[self.embedding_layer])
-            outs = outputs['representations'][self.embedding_layer]
+        else:
+            emb_layer = int(self.embedding_layer)
+            outputs = self.bert(input_ids, repr_layers=[emb_layer])
+            outs = outputs['representations'][emb_layer]
             outputs = self.classify(outs, targets)
 
         return outputs
