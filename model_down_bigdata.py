@@ -34,15 +34,11 @@ class SequenceToSequenceClassificationHead(nn.Module):
         self.finetuning_method = finetuning_method
         self.embedding_layer = embedding_layer
 
-        if self.finetuning_method == 'transformer' and self.embedding_layer != 'all':
-            self.classify = Transformer(hidden_size[0], 1280, num_labels)
-
-        elif 'MLP' in self.finetuning_method:
+        if 'MLP' in self.finetuning_method:
             self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
 
-        elif self.finetuning_method == 'axialAttn' and self.embedding_layer == 'all':
+        elif self.finetuning_method == 'axialAttn':
             self.classify = AxialAttn(hidden_size[0], hidden_size[1], num_labels)
-
 
         self.num_labels = num_labels
         self._ignore_index = ignore_index
