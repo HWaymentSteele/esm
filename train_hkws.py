@@ -16,7 +16,7 @@ if __name__=='__main__':
     parser.add_argument('--split', type=int, default=0, help='An integer input')
     parser.add_argument('--version', type=str, default='t6', help='ESM version (t6, t12, t30, t33)')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
-    parser.add_argument('--finetuning_method', type=str, default='axialAttn', help="Finetuning method: 'transformer','MLP','axialAttn'")
+    parser.add_argument('--finetuning_method', type=str, default='axialAttn', help="Finetuning method: 'MLP_single','MLP_all','axialAttn'")
     parser.add_argument('--epochs', type=int, default=100, help='n_epochs')
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
 
