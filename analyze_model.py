@@ -17,8 +17,8 @@ from sklearn.metrics import roc_auc_score
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Example script with integer and string arguments')
-    parser.add_argument('model', type='str', help='Saved model to analyze')
-    parser.add_argument('--keyword', type='str',default='TEST', help='Keyword to save under')
+    parser.add_argument('model', type=str, help='Saved model to analyze')
+    parser.add_argument('--keyword', type=str,default='TEST', help='Keyword to save under')
     parser.add_argument('--split', type=int, default=0, help='An integer input')
     parser.add_argument('--version', type=str, default='t6', help='ESM version (t6, t12, t30, t33)')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
@@ -79,7 +79,7 @@ if __name__=='__main__':
                         assn=1
                       p= np.exp(logits[1])/(np.exp(logits[1])+np.exp(logits[2]))
                       
-                      lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'result': res, 'p_present': p})
+                      lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'p_present': p})
     
     melted_results = pd.DataFrame.from_records(lst)
     melted_results.to_json("%s_melted_res.json.zip" % args.keyword)
