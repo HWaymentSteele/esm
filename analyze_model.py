@@ -59,6 +59,7 @@ if __name__=='__main__':
                   seq_len = len(seq)
     
                   logits = value_prediction[i].float().cpu().detach().numpy()
+                  print(logits.shape)
     
                   pred = value_prediction[i].float().argmax(-1).cpu().detach().numpy()
                   pred = ''.join([convert[int(y)] for y in pred[:seq_len]])
