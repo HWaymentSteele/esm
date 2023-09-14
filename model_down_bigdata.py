@@ -76,11 +76,6 @@ class ProteinBertForSequence2Sequence(nn.Module):
         missing_loss_weight=1.0):
         super().__init__()
         self.embedding_layer = embedding_layer
-
-        if self.embedding_layer != 'all':
-            # if not 'all', embedding_layer should be an int less than total layers
-            assert(int(self.embedding_layer) < self.bert.num_layers)
-
         self.finetuning_method = finetuning_method
         self.num_labels = 3 #6
         self.version = version
@@ -98,6 +93,10 @@ class ProteinBertForSequence2Sequence(nn.Module):
             model, alphabet = esm.pretrained.esm2_t33_650M_UR50D()
         
         self.bert = model
+        if self.embedding_layer != 'all':
+            # if not 'all', embedding_layer should be an int less than total layers
+            assert(int(self.embedding_layer) < self.bert.num_layers)
+            
         print('num_layers, embed_dim', self.bert.num_layers+1, model.embed_dim)
 
         if self.embedding_layer == 'all':
