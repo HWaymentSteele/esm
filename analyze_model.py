@@ -13,7 +13,7 @@ from model_down_bigdata import ProteinBertForSequence2Sequence
 print(torch.cuda.get_device_name(0))
 import gc
 import argparse
-import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score
 
 # USAGE: first arg is .pt model file to analyze, second arg is KEYWORD for plots, third is split (int)
 
@@ -30,8 +30,6 @@ valid_loader = DataLoader(dataset=dyn_valid,batch_size=batch_size,shuffle=True,
                     collate_fn=dyn_valid.__collate_fn__,drop_last=True)
 
 convert = ['0', 'a','.']
-pred_frac_assns, true_frac_assns, P_counts = [],[],[]
-logit_melted=[]
 lst=[]
 
 for idx, batch in enumerate(valid_loader):
@@ -51,11 +49,9 @@ for idx, batch in enumerate(valid_loader):
 
               pred = value_prediction[i].float().argmax(-1).cpu().detach().numpy()
               pred = ''.join([convert[int(y)] for y in pred[:seq_len]])
-              pred_frac_assns.append(pred.count('.')/len(pred))
 
               target = targets[i].cpu().detach().numpy()
               target = ''.join([convert[int(y)] for y in target])[:seq_len]
-              true_frac_assns.append(target.count('.')/len(target))
 
               P_counts.append(seq.count('P')/len(seq))
               assert len(pred)==seq_len
@@ -65,17 +61,15 @@ for idx, batch in enumerate(valid_loader):
               end_pos = target.rfind('a')
               for j in range(seq_len):
                 if seq[j] != 'P' and j >= start_pos and j <= end_pos:
-                  if pred[j]=='a' and target[j]=='.':
-                    res = 'FN'
-                  elif pred[j] == 'a' and target[j] == 'a':
-                    res = 'TN'
-                  elif pred[j] == '.' and target[j] == 'a':
-                    res = 'FP'
-                  elif pred[j] == '.' and target[j] == '.':
-                    res = 'TP'
-                  lst.append({'residue': seq[j], 'pred': pred[j], 'true': target[j], 'result': res, 'logits': logits[j],
-                            'true_frac_missing':target.count('.')/len(target), 'pred_frac_missing': pred.count('.')/len(pred)})
+                  if target[j]=='.':
+                    assn=0
+                  elif target[j]=='a':
+                    assn=1
+                  p= np.exp(logits[1])/(np.exp(logits[1])+np.exp(logits[2]))
+                  
+                  lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'result': res, 'p_present': p})
 
 melted_results = pd.DataFrame.from_records(lst)
-tmp = melted_results.groupby("residue")["result"].value_counts(normalize=True).mul(100).round(2).unstack()
 melted_results.to_json("%s_melted_res.json.zip" % KEYWORD)
+score = roc_auc_score(melted_results.assn, melted_results.p_present)
+print('ROC AUC: %.3f' % score)
