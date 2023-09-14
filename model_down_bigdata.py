@@ -29,10 +29,6 @@ class SequenceToSequenceClassificationHead(nn.Module):
                 ignore_index: int=0,
                 missing_loss_weight: float=1.0):
 
-                 # num_labels: int,
-                 # ignore_index: int = 0,
-                 # missing_loss_weight: float=1.0):
-
         super().__init__()
         print('hidden_size', hidden_size)
         self.finetuning_method = finetuning_method
@@ -41,7 +37,7 @@ class SequenceToSequenceClassificationHead(nn.Module):
         if self.finetuning_method == 'transformer' and self.embedding_layer != 'all':
             self.classify = Transformer(hidden_size[0], 1280, num_labels)
 
-        elif self.finetuning_method == 'MLP' and self.embedding_layer != 'all':
+        elif 'MLP' in self.finetuning_method:
             self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
 
         elif self.finetuning_method == 'axialAttn' and self.embedding_layer == 'all':
