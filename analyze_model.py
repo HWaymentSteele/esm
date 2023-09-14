@@ -53,7 +53,6 @@ for idx, batch in enumerate(valid_loader):
               target = targets[i].cpu().detach().numpy()
               target = ''.join([convert[int(y)] for y in target])[:seq_len]
 
-              P_counts.append(seq.count('P')/len(seq))
               assert len(pred)==seq_len
               assert len(target)==seq_len
 
