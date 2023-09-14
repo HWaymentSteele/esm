@@ -17,10 +17,10 @@ import matplotlib.pyplot as plt
 
 # USAGE: first arg is .pt model file to analyze, second arg is KEYWORD for plots, third is split (int)
 
-best_model = ProteinBertForSequence2Sequence(version='t12', finetuning_method='axialAttn', embedding_layer='all', missing_loss_weight=1.0).cuda()
+best_model = ProteinBertForSequence2Sequence(version='t6', finetuning_method='axialAttn', embedding_layer='all', missing_loss_weight=1.0).cuda()
 dcts = torch.load(sys.argv[1])
 best_model.load_state_dict(dcts["model_state_dict"])
-_, alphabet = esm.pretrained.esm2_t33_650M_UR50D()
+_, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 
 KEYWORD=sys.argv[2]
 batch_size=16
@@ -79,36 +79,3 @@ for idx, batch in enumerate(valid_loader):
 melted_results = pd.DataFrame.from_records(lst)
 tmp = melted_results.groupby("residue")["result"].value_counts(normalize=True).mul(100).round(2).unstack()
 melted_results.to_json("%s_melted_res.json.zip" % KEYWORD)
-plt.figure(figsize=(6,4))
-plt.bar(tmp.index, tmp['FN'], label = "FN",color='k') 
-plt.bar(tmp.index, tmp['FP'], bottom=tmp['FN'], label = "FP",color='grey') 
-plt.bar(tmp.index, tmp['TN'], bottom=tmp['FN']+tmp['FP'], label = "TN") 
-plt.bar(tmp.index, tmp['TP'], bottom=tmp['TN']+tmp['FN']+tmp['FP'], label = "TP") 
-plt.legend()
-plt.savefig('%s_breakdown_by_residue_type.pdf'% KEYWORD, bbox_inches='tight')
-
-
-plt.figure(figsize=(8,4))
-plt.subplot(1,2,1)
-rp, _ = pearsonr(true_frac_assns, P_counts)
-rs, _ = spearmanr(true_frac_assns, P_counts)
-plt.scatter(true_frac_assns, P_counts,alpha=0.2)
-plt.ylabel('Fraction "P"')
-plt.xlabel('True fraction missing')
-plt.ylim([-0.1,1])
-
-
-plt.title("R_p = %.2f, R_s = %.2f" % (rp, rs))
-
-plt.subplot(1,2,2)
-rp, _ = pearsonr(true_frac_assns, pred_frac_assns)
-rs, _ = spearmanr(true_frac_assns, pred_frac_assns)
-plt.scatter(true_frac_assns, pred_frac_assns,alpha=0.2)
-plt.ylim([-0.1,1])
-
-plt.title("R_p = %.2f, R_s = %.2f" % (rp, rs))
-plt.ylabel('Predicted fraction missing')
-plt.xlabel('True fraction missing')
-
-plt.tight_layout()
-plt.savefig('%s_corrs_total_fraction_missing.pdf'% KEYWORD, bbox_inches='tight')
