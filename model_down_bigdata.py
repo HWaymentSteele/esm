@@ -91,11 +91,11 @@ class ProteinBertForSequence2Sequence(nn.Module):
             
         print('num_layers, embed_dim', self.bert.num_layers+1, model.embed_dim)
 
-        if self.finetuning_type == 'axialAttn':
+        if self.finetuning_method == 'axialAttn':
             self.hidden_size = [model.embed_dim, self.bert.num_layers+1]
-        elif self.finetuning_type == 'MLP_all':
+        elif self.finetuning_method == 'MLP_all':
             self.hidden_size = [model.embed_dim * self.bert.num_layers+1]
-        elif self.finetuning_type == 'MLP_single':
+        elif self.finetuning_method == 'MLP_single':
             self.hidden_size = [model.embed_dim]
 
         self.classify = SequenceToSequenceClassificationHead(self.embedding_layer,
