@@ -59,6 +59,7 @@ if __name__=='__main__':
                   seq_len = len(seq)
     
                   logits = value_prediction[i].float().cpu().detach().numpy()
+                  p_assn = np.exp(logits[:,1])/(np.exp(logits[:,1])+np.exp(logits[:,2]))
                   print(logits.shape)
     
                   pred = value_prediction[i].float().argmax(-1).cpu().detach().numpy()
@@ -77,10 +78,8 @@ if __name__=='__main__':
                       if target[j]=='.':
                         assn=0
                       elif target[j]=='a':
-                        assn=1
-                      p= np.exp(logits[1])/(np.exp(logits[1])+np.exp(logits[2]))
-                      
-                      lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'p_present': p})
+                        assn=1                      
+                      lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'p_present': p_assn[j]})
     
     melted_results = pd.DataFrame.from_records(lst)
     melted_results.to_json("%s_melted_res.json.zip" % args.keyword)
