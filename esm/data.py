@@ -310,7 +310,7 @@ class MSABatchConverter(BatchConverter):
         batch_size = len(raw_batch)
         max_alignments = max(len(msa) for msa in raw_batch)
         #max_seqlen = max(len(msa[0][1]) for msa in raw_batch)
-        max_seqlen=256 # hkws hack copied from revisiting-PLMs
+        max_seqlen=300 # hkws hack copied from revisiting-PLMs
         tokens = torch.empty(
             (
                 batch_size,
@@ -546,7 +546,7 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
         self.assn_tokenizer = SSP_Tokenizer(vocab='assns')
-        self.split_file = os.path.join(self.base_path, f"{split}.txt")
+        self.split_file = os.path.join(self.base_path, "split_files", f"{split}.txt")
 
         with open(self.split_file) as f:
             self.names = f.read().splitlines()
