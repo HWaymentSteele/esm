@@ -14,7 +14,7 @@ from pathlib import Path
 from esm.constants import proteinseq_toks
 
 RawMSA = Sequence[Tuple[str, str]]
-CROP_LEN=256
+CROP_LEN=300
 
 class FastaBatchedDataset(object):
     def __init__(self, sequence_labels, sequence_strs):
@@ -411,8 +411,9 @@ DYN_VOCAB = OrderedDict([
 
 
 ASSNS_VOCAB = OrderedDict([
-    ('A', -1),
-    ('.',  0)])
+    ('x',-1),
+    ('A', 0),
+    ('.',1)])
 
 class SSP_Tokenizer():
 
@@ -520,78 +521,6 @@ def pad_sequences(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarr
 
     return array
 
-class LabeledDynamicsDataset(torch.utils.data.Dataset):
-    """
-    For each protein, we use a pkl file that contains:
-        - seq    : The domain sequence, stored as an L-length string
-        - dssp    : The secondary structure labels, stored as an L-length string
-        - rex_label   : The dynamics labels:     
-    """
-    base_folder = "RelaxDB"
-
-    def __init__(
-        self,
-        split,
-        root_path=os.path.expanduser("~/.cache/torch/data/esm"),
-        download=False,
-        data_type='boosted'
-    ):
-        super().__init__()
-        # assert split in [
-        #     "train_orig",
-        #     "train_boosted",
-        #     "train_both",
-        #     "valid_orig",
-        #     "valid_boosted",
-        #     "train_both",
-        # ], "split not supported"
-        self.root_path = root_path
-        self.base_path = os.path.join(self.root_path, self.base_folder)
-        self.data_type = data_type
-        self.pkl_dir = os.path.join(self.base_path, "data",)
-        self.names = []
-        self.ssp_dict=dict()
-        self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
-        self.dyn_tokenizer = SSP_Tokenizer(vocab='dyn')
-        self.split_file = os.path.join(self.base_path, "split_files", f"{split}.txt")
-
-        with open(self.split_file) as f:
-            self.names = f.read().splitlines()
-
-    def __len__(self):
-        return len(self.names)
-
-    def __getitem__(self, idx):
-        """
-        Returns a dict with the following entires
-         - seq : Str (domain sequence)
-         - ssp : Str (SSP labels)
-         - dyn: Str (dyn labels)
-        """
-        name = self.names[idx]
-        pkl_fname = os.path.join(self.pkl_dir, f"{name}.pkl")
-        with open(pkl_fname, "rb") as f:
-            obj = pickle.load(f)
-
-        sequence = obj['sequence']
-        msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
-        
-        # classifier
-        labels = self.dyn_tokenizer.convert_tokens_to_ids(obj['dyn'])
-        labels = np.asarray(labels, np.int64)+1
-
-        return msa_batch_token,labels
-
-    def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
-        input_ids, label = tuple(zip(*batch))
-        input_ids = (pad_sequences(input_ids, 1))
-        label = torch.from_numpy(pad_sequences_label(label, -1))
-        label = label + 1
-        output = {'input_ids': input_ids,
-              'targets': label}
-
-        return output
-
 class MissingBmrbDataset(torch.utils.data.Dataset):
     """
     For each protein, we use a pkl file that contains:
@@ -612,12 +541,12 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         self.root_path = root_path
         self.base_path = os.path.join(self.root_path, self.base_folder)
         self.data_type = data_type
-        self.pkl_dir = os.path.join(self.base_path, "dyn_data_jul4",)
+        self.pkl_dir = os.path.join(self.base_path, "mBMRB_data")
         self.names = []
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
         self.assn_tokenizer = SSP_Tokenizer(vocab='assns')
-        self.split_file = os.path.join(self.base_path, "big_DB_splits", f"{split}.txt")
+        self.split_file = os.path.join(self.base_path, f"{split}.txt")
 
         with open(self.split_file) as f:
             self.names = f.read().splitlines()
@@ -636,23 +565,31 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         with open(pkl_fname, "rb") as f:
             obj = pickle.load(f)
 
+        start_pos = obj['assns'].find('A')
+        end_pos = obj['assns'].rfind('A')
         sequence = obj['sequence']
+        prolines = [k=='P' for k in sequence]
+        assns = list(obj['assns'])
+        assns = ['x' if ma else val for ma, val in list(zip(prolines, assns))]
+        assns = ['x' if i < start_pos or i>end_pos else val for i, val in enumerate(assns)]
+
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
-        #input_mask = obj['data_mask']
-        
-        labels = self.assn_tokenizer.convert_tokens_to_ids(obj['assns'])[:CROP_LEN]
+        input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
+        #TODO: modify to mask termini and P's
+
+        labels = self.assn_tokenizer.convert_tokens_to_ids(assns)[:CROP_LEN]
         labels = np.asarray(labels, np.int64)+1
 
-        return msa_batch_token,labels
+        return msa_batch_token,input_mask, labels
         
     def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
-        input_ids, label = tuple(zip(*batch))
+        input_ids, input_mask, label = tuple(zip(*batch))
         input_ids = (pad_sequences(input_ids, 1))
-        #input_mask = torch.from_numpy(pad_sequences(input_mask, 0)) #boolean, False = no data
+        input_mask = torch.from_numpy(pad_sequences(input_mask, 0)) #boolean, False = no data
         
         label = torch.from_numpy(pad_sequences_label(label, -1))
         label = label + 1
-        output = {'input_ids': input_ids, 'targets': label}
+        output = {'input_ids': input_ids, "input_mask": input_mask, 'targets': label}
 
         return output
 
