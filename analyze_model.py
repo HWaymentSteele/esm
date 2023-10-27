@@ -49,14 +49,13 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Example script with integer and string arguments')
     parser.add_argument('model', type=str, help='Saved model to analyze')
     parser.add_argument('--keyword', type=str,default='TEST', help='Keyword to save under')
-#    parser.add_argument('--split', type=int, default=0, help='An integer input')
     parser.add_argument('--version', type=str, default='t6', help='ESM version (t6, t12, t30, t33)')
+    parser.add_argument('--dataset', type=str,default='test_set_26oct2023', help='name of test set split')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
     parser.add_argument('--finetuning_method', type=str, default='axialAttn', help="Finetuning method: 'transformer','MLP','axialAttn'")
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
 
     args = parser.parse_args()
-    batch_size=16
     finetune=True
     finetune_emb=True
     missing_loss_weight = args.missing_class_wt
@@ -65,9 +64,11 @@ if __name__=='__main__':
     dcts = torch.load(args.model)
     best_model.load_state_dict(dcts["model_state_dict"])
     _, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
+
+
     
-    batch_size=16
-    dyn_valid = MissingBmrbDataset(split='test_set_26oct2023', root_path = os.path.expanduser('/n/home03/wayment/software/'))
+    dyn_valid = MissingBmrbDataset(split=args.dataset, root_path = os.path.expanduser('/n/home03/wayment/software/'))
+    batch_size=len(dyn_valid)
     valid_loader = DataLoader(dataset=dyn_valid,batch_size=batch_size,shuffle=True,
                         collate_fn=dyn_valid.__collate_fn__,drop_last=True)
     
@@ -101,7 +102,8 @@ if __name__=='__main__':
                   start_pos = target.find('A')
                   end_pos = target.rfind('A')
                   prot_lst.append({'sequence': seq, 'assn_str': target,
-                      'start_pos': start_pos, 'end_pos': end_pos, 'p_missing': p_missing[:seq_len], 'entry_ID': dyn_valid.names[i]})
+                      'start_pos': start_pos, 'end_pos': end_pos,
+                      'p_missing': p_missing[:seq_len], 'entry_ID': dyn_valid.names[i]})
                   for j in range(seq_len):
                     if seq[j] != 'P' and j >= start_pos and j <= end_pos:
                       if target[j]=='.':
