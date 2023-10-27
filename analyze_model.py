@@ -49,18 +49,26 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Example script with integer and string arguments')
     parser.add_argument('model', type=str, help='Saved model to analyze')
     parser.add_argument('--keyword', type=str,default='TEST', help='Keyword to save under')
+    parser.add_argument('--finetune',action='store_true')
+    parser.add_argument('--finetune_emb',action='store_true')
     parser.add_argument('--version', type=str, default='t6', help='ESM version (t6, t12, t30, t33)')
     parser.add_argument('--dataset', type=str,default='test_set_26oct2023', help='name of test set split')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
-    parser.add_argument('--finetuning_method', type=str, default='axialAttn', help="Finetuning method: 'transformer','MLP','axialAttn'")
+    parser.add_argument('--method', type=str, default='axialAttn', help="Finetuning method: 'transformer','MLP','axialAttn'")
+
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
 
     args = parser.parse_args()
     finetune=True
     finetune_emb=True
     missing_loss_weight = args.missing_class_wt
-    best_model = ProteinBertForSequence2Sequence(version=args.version, finetuning_method=args.finetuning_method,
-                                                 embedding_layer=args.embedding_layer, missing_loss_weight=args.missing_class_wt).cuda()
+    best_model = ProteinBertForSequence2Sequence(version=args.version,
+      finetuning_method=args.finetuning_method,
+      embedding_layer=args.embedding_layer,
+      finetune=args.finetune,
+      finetune_emb = args.finetune_emb,
+      missing_loss_weight=args.missing_class_wt).cuda()
+
     dcts = torch.load(args.model)
     best_model.load_state_dict(dcts["model_state_dict"])
     _, alphabet = esm.pretrained.esm2_t6_8M_UR50D()

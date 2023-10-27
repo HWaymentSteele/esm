@@ -15,16 +15,16 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Example script with integer and string arguments')
     parser.add_argument('--version', type=str, default='t6', help='ESM version (t6, t12, t30, t33)')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
-    parser.add_argument('--finetuning_method', type=str, default='axialAttn', help="Finetuning method: 'MLP_single','MLP_all','axialAttn'")
+    parser.add_argument('--method', type=str, default='axialAttn', help="Finetuning method: 'MLP_single','MLP_all','axialAttn'")
     parser.add_argument('--epochs', type=int, default=100, help='n_epochs')
+    parser.add_argument('--finetune',action='store_true')
+    parser.add_argument('--finetune_emb',action='store_true')
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
     parser.add_argument('--job_id', type=str, help='unique id to save models under')
 
     args = parser.parse_args()
     epochs = args.epochs
     batch_size=16
-    finetune=True
-    finetune_emb=True
     version=args.version
     missing_loss_weight = args.missing_class_wt
 
@@ -40,10 +40,13 @@ if __name__=='__main__':
     gc.collect()
     torch.cuda.empty_cache()
 
-    model = ProteinBertForSequence2Sequence(version=version, missing_loss_weight=missing_loss_weight,
+    model = ProteinBertForSequence2Sequence(version=version,
+                        missing_loss_weight=missing_loss_weight,
                          embedding_layer=args.embedding_layer,
-                         finetuning_method=args.finetuning_method,
-                         finetune=finetune, finetune_emb = finetune_emb).cuda()
+                         finetuning_method=args.method,
+                         finetune=args.finetune,
+                         finetune_emb = args.finetune_emb).cuda()
+    
     model = torch.nn.DataParallel(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
     scaler = torch.cuda.amp.GradScaler()

@@ -120,7 +120,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
                 v.requires_grad = False
                  
         if self.finetuning_method == 'axialAttn':
-            # not flattening. output should be batch x 256 x n_layers x embedding
+            # not flattening. output should be batch x crop_size x n_layers x embedding
             outputs = self.bert(input_ids, repr_layers=range(self.bert.num_layers+1))
             outs = torch.stack([v for _, v in sorted(outputs["representations"].items())],dim=2)
             #shp = outs.shape
@@ -135,7 +135,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
             outputs = self.classify(outs, targets)
             
         elif self.finetuning_method == 'MLP_single':
-            emb_layer = int(self.embedding_layer)
+            emb_layer = int(self.embedding_layer)-1
             outputs = self.bert(input_ids, repr_layers=[emb_layer])
             outs = outputs['representations'][emb_layer]
             outputs = self.classify(outs, targets)
