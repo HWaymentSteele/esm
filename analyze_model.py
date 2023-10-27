@@ -15,11 +15,41 @@ import gc
 import argparse
 from sklearn.metrics import roc_auc_score
 
+def calc_PatK(row,baseline=False, verbose=False):
+
+    assns = np.array([float(list('xA.').index(x))-1 for x in row['assn_str']])
+    logits = np.array(row['p_missing'])
+    mask = np.where(assns==-1)
+
+    if verbose:
+        print(row['assn_str'])
+        print(mask)
+        print(sorted_assns)
+        print(assns_of_top_scores)
+
+    logits[mask] = np.NaN
+    assns[mask] = np.NaN
+
+    if baseline:
+        logit_sort = np.random.choice(range(len(logits)),size=len(logits),replace=False)
+    else:
+        logit_sort = np.argsort(logits)
+
+    sorted_logits = np.sort(logits)
+    sorted_assns = np.array([assns[x] for x in logit_sort])
+
+    k = int(np.nansum(assns))
+    n_nans = mask[0].shape[0]
+    assns_of_top_scores = sorted_assns[-1*(k+n_nans):] # taking into account top scores and that nans get sorted to end
+    acc = np.nansum(assns_of_top_scores)/k
+
+    return acc, k
+
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Example script with integer and string arguments')
     parser.add_argument('model', type=str, help='Saved model to analyze')
     parser.add_argument('--keyword', type=str,default='TEST', help='Keyword to save under')
-    parser.add_argument('--split', type=int, default=0, help='An integer input')
+#    parser.add_argument('--split', type=int, default=0, help='An integer input')
     parser.add_argument('--version', type=str, default='t6', help='ESM version (t6, t12, t30, t33)')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
     parser.add_argument('--finetuning_method', type=str, default='axialAttn', help="Finetuning method: 'transformer','MLP','axialAttn'")
@@ -37,14 +67,13 @@ if __name__=='__main__':
     _, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
     
     batch_size=16
-    dyn_valid = MissingBmrbDataset(split='BMRB_jul04_%s_val' % args.split, root_path = os.path.expanduser('/n/home03/wayment/software/'))
-    
+    dyn_valid = MissingBmrbDataset(split='test_set_26oct2023', root_path = os.path.expanduser('/n/home03/wayment/software/'))
     valid_loader = DataLoader(dataset=dyn_valid,batch_size=batch_size,shuffle=True,
                         collate_fn=dyn_valid.__collate_fn__,drop_last=True)
     
-    convert = ['0', 'a','.']
+    convert = ['0',"x", 'A','.']
     lst=[]
-    
+    prot_lst=[] 
     for idx, batch in enumerate(valid_loader):
             seqs = torch.squeeze(batch['input_ids'])
             targets = batch['targets']
@@ -59,29 +88,37 @@ if __name__=='__main__':
                   seq_len = len(seq)
     
                   logits = value_prediction[i].float().cpu().detach().numpy()
-                  p_assn = np.exp(logits[:,1])/(np.exp(logits[:,1])+np.exp(logits[:,2]))
-                  print(logits.shape)
+                  p_missing = np.exp(logits[:,3])/(np.exp(logits[:,2])+np.exp(logits[:,3]))
     
                   pred = value_prediction[i].float().argmax(-1).cpu().detach().numpy()
                   pred = ''.join([convert[int(y)] for y in pred[:seq_len]])
-    
                   target = targets[i].cpu().detach().numpy()
                   target = ''.join([convert[int(y)] for y in target])[:seq_len]
     
                   assert len(pred)==seq_len
                   assert len(target)==seq_len
     
-                  start_pos = target.find('a')
-                  end_pos = target.rfind('a')
+                  start_pos = target.find('A')
+                  end_pos = target.rfind('A')
+                  prot_lst.append({'sequence': seq, 'assn_str': target,
+                      'start_pos': start_pos, 'end_pos': end_pos, 'p_missing': p_missing[:seq_len], 'entry_ID': dyn_valid.names[i]})
                   for j in range(seq_len):
                     if seq[j] != 'P' and j >= start_pos and j <= end_pos:
                       if target[j]=='.':
-                        assn=0
-                      elif target[j]=='a':
-                        assn=1                      
-                      lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'p_present': p_assn[j]})
+                        assn=1
+                      elif target[j]=='A':
+                        assn=0                      
+                      lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'p_missing': p_missing[j]})
     
     melted_results = pd.DataFrame.from_records(lst)
+    score = roc_auc_score(melted_results.assn, melted_results.p_missing)
     melted_results.to_json("%s_melted_res.json.zip" % args.keyword)
-    score = roc_auc_score(melted_results.assn, melted_results.p_present)
+  
+    by_constr_results = pd.DataFrame.from_records(prot_lst)
+    by_constr_results[['P@K','k']] = by_constr_results.apply(lambda row: calc_PatK(row), axis=1, result_type='expand')
+    by_constr_results[['P@K_baseline','k']] = by_constr_results.apply(lambda row: calc_PatK(row,baseline=True), axis=1,result_type='expand')
+    by_constr_results.to_json("%s_by_constr.json.zip" % args.keyword)
+
+    print("P@K: %.3f" % np.mean(by_constr_results['P@K']))
+    print("P@K baseline: %.3f" % np.mean(by_constr_results['P@K_baseline']))
     print('ROC AUC: %.3f' % score)
