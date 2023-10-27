@@ -42,7 +42,7 @@ class SequenceToSequenceClassificationHead(nn.Module):
 
         self.num_labels = num_labels
         self._ignore_index = ignore_index
-        self.loss_weights = torch.FloatTensor([1.0,1.0, missing_loss_weight]).cuda()
+        self.loss_weights = torch.FloatTensor([1.0, 1.0,1.0, missing_loss_weight]).cuda()
 
     def forward(self, sequence_output, targets=None):
         sequence_logits = self.classify(sequence_output)
@@ -69,7 +69,7 @@ class ProteinBertForSequence2Sequence(nn.Module):
         super().__init__()
         self.embedding_layer = embedding_layer
         self.finetuning_method = finetuning_method
-        self.num_labels = 3 #6
+        self.num_labels = 4 #6
         self.version = version
         self.finetune=finetune
         self.finetune_emb = finetune_emb
