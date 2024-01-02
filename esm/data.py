@@ -411,9 +411,9 @@ DYN_VOCAB = OrderedDict([
 
 
 ASSNS_VOCAB = OrderedDict([
-    ('x',-1),
-    ('A', 0),
-    ('.',1)])
+    ('x',-2),
+    ('A', -1),
+    ('.',0)])
 
 class SSP_Tokenizer():
 

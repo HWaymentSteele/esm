@@ -19,6 +19,7 @@ if __name__=='__main__':
     parser.add_argument('--epochs', type=int, default=100, help='n_epochs')
     parser.add_argument('--finetune',action='store_true')
     parser.add_argument('--finetune_emb',action='store_true')
+    parser.add_argument('--save_each',action='store_true')
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
     parser.add_argument('--job_id', type=str, help='unique id to save models under')
 
@@ -29,7 +30,7 @@ if __name__=='__main__':
     missing_loss_weight = args.missing_class_wt
 
     dyn_train = MissingBmrbDataset(split='train_set_26oct2023', root_path = os.path.expanduser('/n/home03/wayment/software/'))
-    dyn_valid = MissingBmrbDataset(split='test_set_26oct2023', root_path = os.path.expanduser('/n/home03/wayment/software/'))
+    dyn_valid = MissingBmrbDataset(split='val_set_26oct2023', root_path = os.path.expanduser('/n/home03/wayment/software/'))
 
     train_loader = DataLoader(dataset=dyn_train,batch_size=batch_size,shuffle=True,
                         collate_fn=dyn_train.__collate_fn__,drop_last=True)
@@ -104,6 +105,11 @@ if __name__=='__main__':
 
         val_loss = val_loss / val_step
         val_acc = val_acc / val_step
+        if args.save_each:
+            save_data = {"model_state_dict": model.module.state_dict(),
+                          "optim_state_dict": optimizer.state_dict(),
+                          "epoch": epoch}
+            torch.save(save_data, "model_epoch_%d_%s.pt" % (epoch, args.job_id))
         if val_acc > best_acc:
             save_data = {"model_state_dict": model.module.state_dict(),
                           "optim_state_dict": optimizer.state_dict(),

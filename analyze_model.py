@@ -8,6 +8,7 @@ import esm
 import torch.nn as nn
 from torch.nn.utils.weight_norm import weight_norm
 from torch.utils.data.dataloader import DataLoader
+import torch.nn.functional as F
 from esm.data import MissingBmrbDataset
 from model_down_bigdata import ProteinBertForSequence2Sequence
 print(torch.cuda.get_device_name(0))
@@ -63,7 +64,7 @@ if __name__=='__main__':
     finetune_emb=True
     missing_loss_weight = args.missing_class_wt
     best_model = ProteinBertForSequence2Sequence(version=args.version,
-      finetuning_method=args.finetuning_method,
+      finetuning_method=args.method,
       embedding_layer=args.embedding_layer,
       finetune=args.finetune,
       finetune_emb = args.finetune_emb,
@@ -76,11 +77,14 @@ if __name__=='__main__':
 
     
     dyn_valid = MissingBmrbDataset(split=args.dataset, root_path = os.path.expanduser('/n/home03/wayment/software/'))
-    batch_size=len(dyn_valid)
-    valid_loader = DataLoader(dataset=dyn_valid,batch_size=batch_size,shuffle=True,
+    if len(dyn_valid)==101:
+        batch_size=101
+    else:
+        batch_size=20 #len(dyn_valid)
+    valid_loader = DataLoader(dataset=dyn_valid,batch_size=batch_size,shuffle=False,
                         collate_fn=dyn_valid.__collate_fn__,drop_last=True)
     
-    convert = ['0',"x", 'A','.']
+    convert = ["x", 'A','.']
     lst=[]
     prot_lst=[] 
     for idx, batch in enumerate(valid_loader):
@@ -96,8 +100,9 @@ if __name__=='__main__':
                   seq = seq.split('<pad>')[0]
                   seq_len = len(seq)
     
-                  logits = value_prediction[i].float().cpu().detach().numpy()
-                  p_missing = np.exp(logits[:,3])/(np.exp(logits[:,2])+np.exp(logits[:,3]))
+                  p = F.softmax(value_prediction[i]).float().cpu().detach().numpy()
+
+                  p_missing = p[:,-1]
     
                   pred = value_prediction[i].float().argmax(-1).cpu().detach().numpy()
                   pred = ''.join([convert[int(y)] for y in pred[:seq_len]])
@@ -110,7 +115,7 @@ if __name__=='__main__':
                   start_pos = target.find('A')
                   end_pos = target.rfind('A')
                   prot_lst.append({'sequence': seq, 'assn_str': target,
-                      'start_pos': start_pos, 'end_pos': end_pos,
+                      'start_pos': start_pos, 'end_pos': end_pos, 'probs': p,
                       'p_missing': p_missing[:seq_len], 'entry_ID': dyn_valid.names[i]})
                   for j in range(seq_len):
                     if seq[j] != 'P' and j >= start_pos and j <= end_pos:
@@ -121,10 +126,11 @@ if __name__=='__main__':
                       lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'p_missing': p_missing[j]})
     
     melted_results = pd.DataFrame.from_records(lst)
-    score = roc_auc_score(melted_results.assn, melted_results.p_missing)
     melted_results.to_json("%s_melted_res.json.zip" % args.keyword)
+    score = roc_auc_score(melted_results.assn, melted_results.p_missing)
   
     by_constr_results = pd.DataFrame.from_records(prot_lst)
+    by_constr_results.to_json("%s_by_constr.json.zip" % args.keyword)
     by_constr_results[['P@K','k']] = by_constr_results.apply(lambda row: calc_PatK(row), axis=1, result_type='expand')
     by_constr_results[['P@K_baseline','k']] = by_constr_results.apply(lambda row: calc_PatK(row,baseline=True), axis=1,result_type='expand')
     by_constr_results.to_json("%s_by_constr.json.zip" % args.keyword)

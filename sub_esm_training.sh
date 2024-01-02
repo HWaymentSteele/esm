@@ -13,6 +13,6 @@ source ~/.bash_profile
 conda activate pytorch 
 
 cd $PWD
-python /n/home03/wayment/esm_BMRB_big/train.py --version $1 --missing_class_wt $2 --split $3
+python /n/home03/wayment/software/esm/train_hkws.py --version $1 --finetuning_method $2 --split $3
 EOT
 
