@@ -9,7 +9,7 @@ def accuracy(logits, labels, ignore_index: int = 0):
         predictions = logits.float().argmax(-1)
         correct = (predictions == labels) * valid_mask
         return correct.sum().float() / valid_mask.sum().float()
-
+    
 class Accuracy(nn.Module):
 
     def __init__(self, ignore_index: int = 0):
@@ -37,6 +37,12 @@ class SequenceToSequenceClassificationHead(nn.Module):
         if 'MLP' in self.finetuning_method:
             self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
 
+        if self.finetuning_method == 'baseline_MLP':
+            self.classify = SimpleMLP(hidden_size[0], 128, num_labels)
+
+        if self.finetuning_method == 'baseline_conv':
+            self.classify = SimpleConv(hidden_size[0], 1280, num_labels)
+            
         elif self.finetuning_method == 'axialAttn':
             self.classify = AxialAttn(hidden_size[0], hidden_size[1], num_labels)
 
@@ -97,6 +103,8 @@ class ProteinBertForSequence2Sequence(nn.Module):
             self.hidden_size = [model.embed_dim * (self.bert.num_layers+1)]
         elif self.finetuning_method == 'MLP_single':
             self.hidden_size = [model.embed_dim]
+        elif 'baseline' in self.finetuning_method:
+            self.hidden_size = [23] # size of OHE embedding
 
         self.classify = SequenceToSequenceClassificationHead(self.embedding_layer,
             self.finetuning_method, self.num_labels, self.hidden_size)
@@ -135,9 +143,17 @@ class ProteinBertForSequence2Sequence(nn.Module):
             outputs = self.classify(outs, targets)
             
         elif self.finetuning_method == 'MLP_single':
+
             emb_layer = int(self.bert.num_layers-1)
             outputs = self.bert(input_ids, repr_layers=[emb_layer])
             outs = outputs['representations'][emb_layer]
+            #print(outs.shape) [16,300,320]
             outputs = self.classify(outs, targets)
+            
+        elif 'baseline' in self.finetuning_method:
+            ohes = nn.functional.one_hot(input_ids-1, num_classes=23)
+            ohes = ohes.to(torch.float32)
+            #print(ohes.shape) [16,300,22]
+            outputs = self.classify(ohes, targets)
 
         return outputs
