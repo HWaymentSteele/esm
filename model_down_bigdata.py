@@ -1,23 +1,44 @@
 import torch
 import esm
 import torch.nn as nn
+import torch.nn.functional as F
 from classifier_modules import *
+from torchmetrics.functional import precision, recall, auroc, accuracy, specificity, f1_score
 
-def accuracy(logits, labels, ignore_index: int = 0):
+# loss_fct = torch.hub.load('adeelh/pytorch-multi-class-focal-loss', model='focal_loss',
+#                 alpha=[0.0001, 1.0, 10.0], gamma=5, reduction='mean', device='cuda', dtype=torch.float32, force_reload=False)
+
+def metrics(logits, labels, ignore_index: int = 0):
     with torch.no_grad():
         valid_mask = (labels != ignore_index)
         predictions = logits.float().argmax(-1)
-        correct = (predictions == labels) * valid_mask
-        return correct.sum().float() / valid_mask.sum().float()
+                
+        preds = predictions[valid_mask] #only where labels are not 0
+        preds = torch.clamp(preds, 1, 2) # clamp predictions of 0 category to "assigned" class
+        preds -= 1 # then shift (1,2) to (0,1)
+        
+        l = labels[valid_mask] #only where labels are not 0
+        l -=1 #shift (1,2) to (0,1)
+        
+        probs = F.softmax(logits[valid_mask])[:,-1] # take only for last category
+        
+        p = precision(preds, l, task="binary", num_classes=2, average='micro')
+        r = recall(preds, l, task="binary", num_classes=2, average='micro')
+        acc = accuracy(preds, l, task="binary", num_classes=2, average='micro')
+        spec = specificity(preds, l, task="binary", num_classes=2, average='micro')
+        f1 = f1_score(preds, l, task="binary", num_classes=2, average='micro')
+        au = auroc(probs, l, task="binary", num_classes=2, average='micro')
+
+        return acc, p, r, spec, f1, au
     
-class Accuracy(nn.Module):
+class Metrics(nn.Module):
 
     def __init__(self, ignore_index: int = 0):
         super().__init__()
         self.ignore_index = ignore_index
 
     def forward(self, inputs, target):
-        return accuracy(inputs, target) #,  self.ignore_index)
+        return metrics(inputs, target, self.ignore_index)
 
 class SequenceToSequenceClassificationHead(nn.Module):
 
@@ -30,15 +51,18 @@ class SequenceToSequenceClassificationHead(nn.Module):
                 missing_loss_weight: float=1.0):
 
         super().__init__()
-        print('hidden_size', hidden_size)
+        #print('hidden_size', hidden_size)
         self.finetuning_method = finetuning_method
         self.embedding_layer = embedding_layer
 
         if 'MLP' in self.finetuning_method:
             self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
 
+        elif 'conv' in self.finetuning_method:
+            self.classify = SimpleConv(hidden_size[0], 1280, num_labels)
+            
         if self.finetuning_method == 'baseline_MLP':
-            self.classify = SimpleMLP(hidden_size[0], 128, num_labels)
+            self.classify = SimpleMLP(hidden_size[0], 1280, num_labels)
 
         if self.finetuning_method == 'baseline_conv':
             self.classify = SimpleConv(hidden_size[0], 1280, num_labels)
@@ -55,10 +79,12 @@ class SequenceToSequenceClassificationHead(nn.Module):
         outputs = (sequence_logits,)
         if targets is not None:
             loss_fct = nn.CrossEntropyLoss(weight = self.loss_weights, ignore_index=self._ignore_index)
+            
             classification_loss = loss_fct(
                 sequence_logits.view(-1, self.num_labels), targets.view(-1))
-            acc_fct = Accuracy(ignore_index=self._ignore_index)
-            metrics = {'accuracy': acc_fct(sequence_logits.view(-1, self.num_labels), targets.view(-1))}
+            acc_fct = Metrics(ignore_index=self._ignore_index)
+            acc, p, r, spec, f1, au = acc_fct(sequence_logits.view(-1, self.num_labels), targets.view(-1))
+            metrics = {'accuracy': acc, 'precision': p, 'recall': r, 'specificity': spec, 'f1-score': f1,'auroc': au}
 
             loss_and_metrics = (classification_loss, metrics)
             outputs = (loss_and_metrics,) + outputs
@@ -95,13 +121,13 @@ class ProteinBertForSequence2Sequence(nn.Module):
             # if not 'all', embedding_layer should be an int less than total layers
             assert(int(self.embedding_layer) < self.bert.num_layers)
             
-        print('num_layers, embed_dim', self.bert.num_layers+1, model.embed_dim)
+        #print('num_layers, embed_dim', self.bert.num_layers+1, model.embed_dim)
 
         if self.finetuning_method == 'axialAttn':
             self.hidden_size = [model.embed_dim, self.bert.num_layers+1]
-        elif self.finetuning_method == 'MLP_all':
+        elif 'all' in self.finetuning_method:
             self.hidden_size = [model.embed_dim * (self.bert.num_layers+1)]
-        elif self.finetuning_method == 'MLP_single':
+        elif 'single' in self.finetuning_method:
             self.hidden_size = [model.embed_dim]
         elif 'baseline' in self.finetuning_method:
             self.hidden_size = [23] # size of OHE embedding
@@ -140,6 +166,13 @@ class ProteinBertForSequence2Sequence(nn.Module):
             outs = torch.stack([v for _, v in sorted(outputs["representations"].items())],dim=2)
             shp = outs.shape
             outs = outs.view(shp[0], shp[1], -1)
+            outputs = self.classify(outs, targets)
+          
+        elif self.finetuning_method == 'conv_single':
+            emb_layer = int(self.bert.num_layers-1)
+            outputs = self.bert(input_ids, repr_layers=[emb_layer])
+            outs = outputs['representations'][emb_layer]
+            #print(outs.shape) [16,300,320]
             outputs = self.classify(outs, targets)
             
         elif self.finetuning_method == 'MLP_single':

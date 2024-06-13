@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import pearsonr, spearmanr
 import torch
 import sys, os
-sys.path.append('/n/home03/wayment/software/esm/')
+sys.path.append('/home/jupyter-hannah/software/esm')
 import esm
 import torch.nn as nn
 from torch.nn.utils.weight_norm import weight_norm
@@ -11,10 +11,15 @@ from torch.utils.data.dataloader import DataLoader
 import torch.nn.functional as F
 from esm.data import MissingBmrbDataset
 from model_down_bigdata import ProteinBertForSequence2Sequence
-print(torch.cuda.get_device_name(0))
 import gc
 import argparse
 from sklearn.metrics import roc_auc_score
+
+import warnings
+warnings.filterwarnings("ignore")
+
+
+RDB_PATH='/home/jupyter-hannah/software/RelaxDB/'
 
 def calc_PatK(row,baseline=False, verbose=False):
 
@@ -56,12 +61,11 @@ if __name__=='__main__':
     parser.add_argument('--dataset', type=str,default='test_set_26oct2023', help='name of test set split')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
     parser.add_argument('--method', type=str, default='axialAttn', help="Finetuning method: 'transformer','MLP','axialAttn'")
-
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
+    
+    gc.collect()
 
     args = parser.parse_args()
-    finetune=True
-    finetune_emb=True
     missing_loss_weight = args.missing_class_wt
     best_model = ProteinBertForSequence2Sequence(version=args.version,
       finetuning_method=args.method,
@@ -74,67 +78,75 @@ if __name__=='__main__':
     best_model.load_state_dict(dcts["model_state_dict"])
     _, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 
-
+    dssp = pd.read_csv(RDB_PATH+'dssp_ESMmodels_mBMRB_26oct2023.csv',index_col=0)
     
-    dyn_valid = MissingBmrbDataset(split=args.dataset, root_path = os.path.expanduser('/n/home03/wayment/software/'))
-    if len(dyn_valid)==101:
-        batch_size=101
-    else:
-        batch_size=20 #len(dyn_valid)
+    if 'relaxdb' in args.dataset:
+        rdb = pd.read_json(RDB_PATH+'/101x_testset_alldata.json.zip')
+    
+    dyn_valid = MissingBmrbDataset(split=args.dataset, root_path = os.path.expanduser('/home/jupyter-hannah/software/'))
+    batch_size = len(dyn_valid) # to make getting names work from split file, terrible I know
+
     valid_loader = DataLoader(dataset=dyn_valid,batch_size=batch_size,shuffle=False,
                         collate_fn=dyn_valid.__collate_fn__,drop_last=True)
     
-    convert = ["x", 'A','.']
+    convert = ["x", 'A', '.']
     lst=[]
     prot_lst=[] 
+    
     for idx, batch in enumerate(valid_loader):
-            seqs = torch.squeeze(batch['input_ids'])
-            targets = batch['targets']
-            inputs, targets = torch.tensor(seqs).cuda(), torch.tensor(targets).cuda()
-            with torch.no_grad():
-                outputs = best_model(inputs, targets=targets)
-                loss_acc, value_prediction = outputs
-    
-                for i in range(batch_size):
-                  seq = ''.join([alphabet.get_tok(x) for x in seqs[i].cpu().detach().numpy()])
-                  seq = seq.split('<pad>')[0]
-                  seq_len = len(seq)
-    
-                  p = F.softmax(value_prediction[i]).float().cpu().detach().numpy()
+        seqs = torch.squeeze(batch['input_ids'])
+        targets = batch['targets']
+        inputs, targets = torch.tensor(seqs).cuda(), torch.tensor(targets).cuda()
+        with torch.no_grad():
+            outputs = best_model(inputs, targets=targets)
+            loss_acc, value_prediction = outputs
+            
+            print_lst = ["%.3f" % v for v in loss_acc[1].values()]
+            print(args.model, args.dataset, '\t'.join(print_lst))
 
-                  p_missing = p[:,-1]
-    
-                  pred = value_prediction[i].float().argmax(-1).cpu().detach().numpy()
-                  pred = ''.join([convert[int(y)] for y in pred[:seq_len]])
-                  target = targets[i].cpu().detach().numpy()
-                  target = ''.join([convert[int(y)] for y in target])[:seq_len]
-    
-                  assert len(pred)==seq_len
-                  assert len(target)==seq_len
-    
-                  start_pos = target.find('A')
-                  end_pos = target.rfind('A')
-                  prot_lst.append({'sequence': seq, 'assn_str': target,
-                      'start_pos': start_pos, 'end_pos': end_pos, 'probs': p,
-                      'p_missing': p_missing[:seq_len], 'entry_ID': dyn_valid.names[i]})
-                  for j in range(seq_len):
+            for i in range(batch_size):
+                seq = ''.join([alphabet.get_tok(x) for x in seqs[i].cpu().detach().numpy()])
+                seq = seq.split('<pad>')[0]
+                seq_len = len(seq)
+                entry_ID = dyn_valid.names[i]
+                
+                dssp_str = dssp.loc[entry_ID]['DSSP']
+
+                logits = value_prediction[i].float().cpu().detach().numpy()
+                p = F.softmax(value_prediction[i]).float().cpu().detach().numpy()
+
+                p_missing = p[:,-1]
+                
+                pred = value_prediction[i].float().argmax(-1).cpu().detach().numpy()
+                pred = ''.join([convert[int(y)] for y in pred[:seq_len]])
+                target = targets[i].cpu().detach().numpy()
+                target = ''.join([convert[int(y)] for y in target])[:seq_len]
+                if 'relaxdb' in args.dataset:
+                    target = rdb.loc[rdb.entry_ID==entry_ID].iloc[0]['assn_str_with_rex_g3'].replace(' ','')[:300]
+                    #25113 is longer than 300
+                assert len(pred)==seq_len
+                assert len(target)==seq_len
+                
+                start_pos = target.find('A')
+                end_pos = target.rfind('A')
+                
+                prot_lst.append({'sequence': seq, 'assn_str': target,
+                  'start_pos': start_pos, 'end_pos': end_pos, 'probs': p, 'logits': logits,
+                  'p_missing': p_missing[:seq_len], 'entry_ID': entry_ID, 'dssp': dssp_str})
+                
+                for j in range(seq_len):
                     if seq[j] != 'P' and j >= start_pos and j <= end_pos:
-                      if target[j]=='.':
-                        assn=1
-                      elif target[j]=='A':
-                        assn=0                      
-                      lst.append({'residue': seq[j], 'pred': pred[j], 'assn': assn, 'p_missing': p_missing[j]})
-    
+                        if target[j]=='A':
+                            assn=0
+                        else: # '.' or 'r'
+                            assn=1
+                        lst.append({'residue': seq[j], 'pred': pred[j],
+                                    'assn': assn,'target': target[j],
+                                    'logits': logits[j], 'p_missing': p_missing[j],
+                                    'entry_ID': entry_ID, 'seqpos': j, 'dssp': dssp_str[j]})
+                        
     melted_results = pd.DataFrame.from_records(lst)
     melted_results.to_json("%s_melted_res.json.zip" % args.keyword)
-    score = roc_auc_score(melted_results.assn, melted_results.p_missing)
   
     by_constr_results = pd.DataFrame.from_records(prot_lst)
     by_constr_results.to_json("%s_by_constr.json.zip" % args.keyword)
-    by_constr_results[['P@K','k']] = by_constr_results.apply(lambda row: calc_PatK(row), axis=1, result_type='expand')
-    by_constr_results[['P@K_baseline','k']] = by_constr_results.apply(lambda row: calc_PatK(row,baseline=True), axis=1,result_type='expand')
-    by_constr_results.to_json("%s_by_constr.json.zip" % args.keyword)
-
-    print("P@K: %.3f" % np.mean(by_constr_results['P@K']))
-    print("P@K baseline: %.3f" % np.mean(by_constr_results['P@K_baseline']))
-    print('ROC AUC: %.3f' % score)
