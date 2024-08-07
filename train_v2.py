@@ -25,6 +25,8 @@ if __name__=='__main__':
     parser.add_argument('--save_each',action='store_true')
     parser.add_argument('--missing_class_wt', type=float, default=1.0, help='weight on missing class for cross entropy loss')
     parser.add_argument('--job_id', type=str, help='unique id to save models under')
+    parser.add_argument('--train_set', type=str, default='train_set_26oct2023', help='training set (must exist in RelaxDB/split_files)')
+    parser.add_argument('--valid_set', type=str, default='val_set_26oct2023', help='validation set (must exist in RelaxDB/split_files)')
 
     args = parser.parse_args()
     epochs = args.epochs
@@ -32,9 +34,9 @@ if __name__=='__main__':
     version=args.version
     missing_loss_weight = args.missing_class_wt
 
-    dyn_train = MissingBmrbDataset(split='train_set_26oct2023', mask_termini = args.mask_termini,
+    dyn_train = MissingBmrbDataset(split=args.train_set, mask_termini = args.mask_termini,
                                    root_path = os.path.expanduser('/home/jupyter-hannah/software/'))
-    dyn_valid = MissingBmrbDataset(split='val_set_26oct2023', root_path = os.path.expanduser('/home/jupyter-hannah/software/'))
+    dyn_valid = MissingBmrbDataset(split=args.valid_set, root_path = os.path.expanduser('/home/jupyter-hannah/software/'))
 
     train_loader = DataLoader(dataset=dyn_train,batch_size=batch_size,shuffle=True,
                         collate_fn=dyn_train.__collate_fn__,drop_last=True)
