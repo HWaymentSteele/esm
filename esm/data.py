@@ -410,10 +410,19 @@ DYN_VOCAB = OrderedDict([
     ('B',  6)])
 
 
+# ASSNS_VOCAB = OrderedDict([
+#     ('x',-2),
+#     ('A', -1),
+#     ('.',0)])
+
 ASSNS_VOCAB = OrderedDict([
-    ('x',-2),
-    ('A', -1),
-    ('.',0)])
+    ('p',-2), # proline
+    ('x',-2), # mask character - for termini
+    ('A', -1), # vanilla
+    ('v',-1), # sub-ns motion (not using rn)
+    ('.',0), # missing
+    ('^',0) # rex
+])
 
 class SSP_Tokenizer():
 
@@ -534,7 +543,8 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         split,
         root_path=os.path.expanduser("~/.cache/torch/data/esm"),
         download=False,
-        data_type='boosted'
+        data_type='boosted',
+        mask_termini=True
     ):
         super().__init__()
 
@@ -543,6 +553,7 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         self.data_type = data_type
         self.pkl_dir = os.path.join(self.base_path, "mBMRB_data")
         self.names = []
+        self.mask_termini = mask_termini
         self.ssp_dict=dict()
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
         self.assn_tokenizer = SSP_Tokenizer(vocab='assns')
@@ -565,13 +576,17 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         with open(pkl_fname, "rb") as f:
             obj = pickle.load(f)
 
+        if 'assns' not in obj.keys() and 'label' in obj.keys():
+            obj['assns'] = obj['label']
+
         start_pos = obj['assns'].find('A')
         end_pos = obj['assns'].rfind('A')
         sequence = obj['sequence']
         prolines = [k=='P' for k in sequence]
         assns = list(obj['assns'])
         assns = ['x' if ma else val for ma, val in list(zip(prolines, assns))]
-        assns = ['x' if i < start_pos or i>end_pos else val for i, val in enumerate(assns)]
+        if self.mask_termini:
+            assns = ['x' if i < start_pos or i>end_pos else val for i, val in enumerate(assns)]
 
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
         input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
