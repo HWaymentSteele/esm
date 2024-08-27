@@ -159,8 +159,8 @@ class Alphabet(object):
             standard_toks = proteinseq_toks["toks"]
             prepend_toks = ("<cls>", "<pad>", "<eos>", "<unk>")
             append_toks = ("<mask>",)
-            prepend_bos = False
-            append_eos = False
+            prepend_bos = True
+            append_eos = True
             use_msa = True
         elif "invariant_gvp" in name.lower():
             standard_toks = proteinseq_toks["toks"]
@@ -468,7 +468,7 @@ import numpy as np
 def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
     #shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
-    shape = [batch_size] + [CROP_LEN]
+    shape = [batch_size] + [CROP_LEN+2]  #+2 for bos/eos
     #print('pad_sequences_label shape', shape)
     if dtype is None:
         dtype = sequences[0].dtype
@@ -482,26 +482,6 @@ def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np
 
 
     for arr, seq in zip(array, sequences):
-        arrslice = tuple(slice(dim) for dim in seq.shape)
-        arr[arrslice] = seq  
-
-    return array
-
-def pad_data(data: np.ndarray, constant_value=0, dtype=None) -> np.ndarray:
-    batch_size = len(data)
-    #shape = [batch_size] + [np.max([len(seq) for seq in data])]
-    shape = [batch_size] + [CROP_LEN]
-    if dtype is None:
-        dtype = data[0].dtype
-
-    if isinstance(data[0], np.ndarray):
-        array = np.full(shape, constant_value, dtype=dtype)
-    elif isinstance(data[0], torch.Tensor):
-        array = torch.full(shape, constant_value, dtype=dtype)
-    else:
-        array = np.full(shape, constant_value, dtype=dtype)
-
-    for arr, seq in zip(array, data):
         arrslice = tuple(slice(dim) for dim in seq.shape)
         arr[arrslice] = seq  
 
@@ -587,9 +567,11 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         assns = ['x' if ma else val for ma, val in list(zip(prolines, assns))]
         if self.mask_termini:
             assns = ['x' if i < start_pos or i>end_pos else val for i, val in enumerate(assns)]
-
+            
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
         input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
+        #print(input_mask.shape)
+        #input_mask[[prolines]] = 0
         #TODO: modify to mask termini and P's
 
         labels = self.assn_tokenizer.convert_tokens_to_ids(assns)[:CROP_LEN]

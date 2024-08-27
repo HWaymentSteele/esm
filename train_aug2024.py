@@ -12,13 +12,13 @@ import gc
 import argparse
 
 from torch.optim.lr_scheduler import StepLR
-
+_, alphabet = esm.pretrained.esm2_t6_8M_UR50D()
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description='Example script with integer and string arguments')
     parser.add_argument('--version', type=str, default='t6', help='ESM version (t6, t12, t30, t33)')
     parser.add_argument('--embedding_layer', type=str, default='all', help='Embeddings to use (default: all)')
     parser.add_argument('--method', type=str, default='axialAttn', help="Finetuning method: 'MLP_single','MLP_all','axialAttn'")
-    parser.add_argument('--epochs', type=int, default=50, help='n_epochs')
+    parser.add_argument('--epochs', type=int, default=100, help='n_epochs')
     parser.add_argument('--finetune',action='store_true')
     parser.add_argument('--finetune_emb',action='store_true')
     parser.add_argument('--mask_termini',action='store_true')
@@ -55,8 +55,8 @@ if __name__=='__main__':
                          finetune_emb = args.finetune_emb).cuda()
     
     model = torch.nn.DataParallel(model)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
-    #scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
+    optimizer = torch.optim.AdamW(model.parameters(),lr=1e-3)
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
     scaler = torch.cuda.amp.GradScaler()
 
     for epoch in range(epochs):
@@ -66,12 +66,20 @@ if __name__=='__main__':
         train_step = 0
         for idx, batch in enumerate(train_loader):
             seqs = torch.squeeze(batch['input_ids'])
+            #print(''.join([alphabet.get_tok(x) for x in seqs[0].cpu().detach().numpy()]))
             targets = batch['targets']
+            
+#             input_mask = torch.squeeze(batch['input_mask'])
+#             input_mask[seqs == alphabet.get_idx('P')] = 0
+#             input_mask[seqs == alphabet.get_idx('<PAD>')] = 0
+#             input_mask[targets == 0] = 0
+#             seqs = seqs * input_mask
+            
             inputs, targets = torch.as_tensor(seqs).cuda(), torch.as_tensor(targets).cuda()
             outputs = model(inputs, targets=targets)
             loss_acc, value_prediction = outputs
             loss = loss_acc[0]
-            acc = loss_acc[1]['accuracy']
+            acc = loss_acc[1]['auroc']
             loss=torch.mean(loss)
             acc=torch.mean(acc)
 
@@ -81,11 +89,12 @@ if __name__=='__main__':
 
             optimizer.zero_grad()
             scaler.scale(loss).backward()
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 3) # hkws added 26 aug
 
             scaler.step(optimizer)
             scaler.update()
             if train_step > 0 and train_step % 100 == 0:
-                print("Step: {} / {} finish. Training Loss: {:.8f}. Training F-score: {:.8f}."
+                print("Step: {} / {} finish. Training Loss: {:.8f}. Training AUROC: {:.8f}."
                       .format(train_step, len(train_loader), (train_loss / train_step),
                               (train_acc / train_step)))
 
@@ -96,6 +105,13 @@ if __name__=='__main__':
             seqs = torch.squeeze(batch['input_ids'])
             targets = batch['targets']
             inputs, targets = torch.tensor(seqs).cuda(), torch.tensor(targets).cuda()
+            
+#             input_mask = torch.squeeze(batch['input_mask'])
+#             input_mask[seqs == alphabet.get_idx('P')] = 0
+#             input_mask[seqs == alphabet.get_idx('<PAD>')] = 0
+#             input_mask[targets == 0] = 0
+#             seqs = seqs * input_mask
+            
             with torch.no_grad():
                 outputs = model(inputs, targets=targets)
                 loss_acc, value_prediction = outputs
