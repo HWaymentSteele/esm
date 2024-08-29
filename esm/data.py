@@ -12,6 +12,7 @@ import shutil
 import torch
 from pathlib import Path
 from esm.constants import proteinseq_toks
+import gzip
 
 RawMSA = Sequence[Tuple[str, str]]
 CROP_LEN=300
@@ -159,8 +160,8 @@ class Alphabet(object):
             standard_toks = proteinseq_toks["toks"]
             prepend_toks = ("<cls>", "<pad>", "<eos>", "<unk>")
             append_toks = ("<mask>",)
-            prepend_bos = True
-            append_eos = True
+            prepend_bos = False
+            append_eos = False
             use_msa = True
         elif "invariant_gvp" in name.lower():
             standard_toks = proteinseq_toks["toks"]
@@ -468,7 +469,7 @@ import numpy as np
 def pad_sequences_label(sequences: Sequence, constant_value=0, dtype=None) -> np.ndarray:
     batch_size = len(sequences)
     #shape = [batch_size] + np.max([seq.shape for seq in sequences], 0).tolist()
-    shape = [batch_size] + [CROP_LEN+2]  #+2 for bos/eos
+    shape = [batch_size] + [CROP_LEN]  #+2 for bos/eos
     #print('pad_sequences_label shape', shape)
     if dtype is None:
         dtype = sequences[0].dtype
@@ -524,7 +525,8 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         root_path=os.path.expanduser("~/.cache/torch/data/esm"),
         download=False,
         data_type='boosted',
-        mask_termini=True
+        mask_termini=True,
+        load_attn=False
     ):
         super().__init__()
 
@@ -538,7 +540,8 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
         self.ssp_tokenizer = SSP_Tokenizer(vocab='ssp')
         self.assn_tokenizer = SSP_Tokenizer(vocab='assns')
         self.split_file = os.path.join(self.base_path, "split_files", f"{split}.txt")
-
+        self.load_attn = load_attn
+        
         with open(self.split_file) as f:
             self.names = f.read().splitlines()
 
@@ -570,23 +573,32 @@ class MissingBmrbDataset(torch.utils.data.Dataset):
             
         msa_batch_label, msa_batch_str, msa_batch_token = msa_batch_converter([(name, sequence)])
         input_mask = np.asarray(np.ones_like(msa_batch_token[0]))
-        #print(input_mask.shape)
-        #input_mask[[prolines]] = 0
-        #TODO: modify to mask termini and P's
 
         labels = self.assn_tokenizer.convert_tokens_to_ids(assns)[:CROP_LEN]
         labels = np.asarray(labels, np.int64)+1
+        
+        if self.load_attn:
+            with gzip.open('t33_attn/%s.npy.gz' % name, 'rb') as f:
+                arr = np.load(f)
+            return msa_batch_token, input_mask, labels, name, arr
+        else:
+            return msa_batch_token, input_mask, labels, name
 
-        return msa_batch_token,input_mask, labels
         
     def __collate_fn__(self, batch: List[Tuple[Any, ...]]):
-        input_ids, input_mask, label = tuple(zip(*batch))
+        if self.load_attn:
+            input_ids, input_mask, label, names, arrs = tuple(zip(*batch))
+        else:
+            input_ids, input_mask, label, names = tuple(zip(*batch))
         input_ids = (pad_sequences(input_ids, 1))
         input_mask = torch.from_numpy(pad_sequences(input_mask, 0)) #boolean, False = no data
         
         label = torch.from_numpy(pad_sequences_label(label, -1))
         label = label + 1
-        output = {'input_ids': input_ids, "input_mask": input_mask, 'targets': label}
+        output = {'input_ids': input_ids, "input_mask": input_mask, 'targets': label,'names': names}
+
+        if self.load_attn:
+            output['attn'] = np.array(arrs)
 
         return output
 
